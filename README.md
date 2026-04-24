@@ -1,261 +1,121 @@
 # InstallSentry
 
-> Supply-chain blast-radius visualizer that traces npm install-time lifecycle scripts, file/network access, and secret-canary reads.
+> See what **npm install** really does: trace lifecycle scripts, file and network access, and fake “secret” reads—then map findings onto your **package-lock.json** dependency graph with an HTML report and optional **SARIF** for CI.
 
 [![CI](https://github.com/anasm266/installsentry/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/anasm266/installsentry/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/installsentry.svg)](https://www.npmjs.com/package/installsentry)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## At a glance
+## Install
 
-- **Problem:** `npm install` can run **lifecycle scripts** in dependencies with access to your filesystem, env, and network. That risk is **opaque** if you only read `package.json` at the top level.
-- **What this is:** A **CLI** that (1) parses your **`package-lock.json` v3** into a graph, (2) runs a **sandboxed** `npm install` (host or **optional Docker**) with **canary** secrets, (3) loads a **Node shim** (`NODE_OPTIONS=--require`) to log I/O, (4) writes an **HTML report** and optional **SARIF 2.1.0**, and (5) an optional **install-time gate** (`--ci`) with **strict or allowlisted** network policy. See the **[threat model](docs/THREAT-MODEL.md)** for what is and is not guaranteed.
-
-**Try it (from npm, after [publish](RELEASING.md)):**
-
-```bash
-npx installsentry@latest scan ./path-to-your-app
-npx installsentry@latest run ./path-to-your-app -o report.html
-```
-
-**Or from a clone (contributors / latest `main`):**
-
-```bash
-git clone https://github.com/anasm266/installsentry.git && cd installsentry
-npm ci && npm run build
-node dist/cli.js scan ./path-to-your-app
-node dist/cli.js run ./path-to-your-app -o report.html
-```
-
-**Limitations (read before trusting it for production):** only **`package-lock.json` lockfileVersion 3**; **npm** (not pnpm / Yarn for the lockfile layer yet); per-event **package** is inferred from **`process.cwd()`** under the install root (not perfect if a script `chdir`s; see [adversarial notes](tests/fixtures/adversarial/chdir-demo/README.md)); the tool is **observational**—see **[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md)**. For **`--ci`**, the default is **no network** unless you set **`--allow-hosts`** (or a config file); that keeps the gate useful on real projects that hit the registry. For a deliberate exfil test, see **[`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/)** and **[`docs/samples/`](docs/samples/)** for static HTML and policy examples.
-
-**Security & responsible use:** The [malware-demo](#malicious-demo-fixture-canary-exfil) fixture is for **local testing and learning** on machines you are allowed to use. Do not point this tool (or the fixture) at systems you do not own, and do not use it to develop or deliver harmful code. InstallSentry is an **educational / research** tool; it is not a substitute for a commercial malware scanner, dependency policy, or formal supply-chain program.
-
-### Example: HTML report (malware-demo)
-
-Full-page view of a generated report in the browser. The **Secret Canary** panel shows a fake AWS canary in an outbound request URL; **Network** includes registry traffic and the `example.com` probe; the **right pane** is the Cytoscape dependency graph. The file below is committed in this repository as `docs/images/report-example.png` so it always renders on GitHub.
-
-<p align="center">
-  <img src="docs/images/report-example.png" alt="InstallSentry HTML report: secret canary alert, network egress, and dependency graph (malware-demo fixture)" width="100%" />
-</p>
-
-To regenerate the screenshot locally: `npm run docs:screenshot` (uses the `playwright` devDependency; on Linux/macOS run `npx playwright install chromium` once. On Windows, the script uses the system **Edge** browser.)
-
-## What it does
-
-Every time you run `npm install`, packages can execute lifecycle scripts (`preinstall`, `install`, `postinstall`) with full access to your environment, filesystem, and network. InstallSentry tells you exactly what happened inside that black box.
-
-- **Scans** `package-lock.json` for packages with lifecycle scripts
-- **Sandboxes** `npm install` in a disposable temp directory with fake secrets
-- **Traces** `fs.readFile`, `http`/`https` (including `get`), `child_process.spawn` calls via a runtime shim; canary substrings in outbound request URLs are treated as secret exfil
-- **Detects** if any package reads your fake canary tokens (npm, AWS, GitHub, SSH)
-- **Maps** every suspicious event back to the root dependency that introduced it
-- **Reports** everything in a single interactive HTML file with dependency graph, timeline, and blast-radius paths
-- **Gates CI** with `--ci` flag — fails the build if secrets are touched or unauthorized network calls are made
-
-## Demo
-
-```bash
-# Scan a project for lifecycle scripts
-npx installsentry scan ./my-project
-
-# Run sandboxed install and generate report
-npx installsentry run ./my-project --output report.html
-
-# CI mode (strict: any network egress or secret hit fails)
-npx installsentry run ./my-project --ci
-
-# CI with a registry allowlist and SARIF for GitHub Advanced Security or upload-artifact
-npx installsentry run ./my-app --ci --allow-hosts "registry.npmjs.org" -o report.html --sarif results.sarif
-```
-
-### Malicious demo fixture (canary exfil)
-
-The repo includes [`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/): a root project with a `file:` dependency whose `postinstall` reads `AWS_SECRET_ACCESS_KEY` and issues an HTTPS request with the canary in the query string. The shim flags canary substrings in outbound URLs as **Secret Canary** hits (and still logs **Network Egress**). After `npm run build`:
-
-```bash
-node dist/cli.js run tests/fixtures/malware-demo -o malware-report.html
-node dist/cli.js run tests/fixtures/malware-demo --ci
-```
-
-The last command exits with a non-zero status: both secret exfil and network are detected. Traces attribute events to a **lockfile path** (e.g. `node_modules/malice-local`) from **current working directory** under the install root, so the **Blast radius** panel and graph can highlight the responsible package.
-
-## Architecture
-
-```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
-│  package-lock   │────▶│  Lockfile    │────▶│  Dependency │
-│    parser       │     │   Parser     │     │   Graph     │
-└─────────────────┘     └──────────────┘     └─────────────┘
-                                                     │
-┌─────────────────┐     ┌──────────────┐            │
-│   HTML Report   │◀────│   Analyzer   │◀───────────┘
-│  (Cytoscape.js) │     │ (blast radius│
-└─────────────────┘     │  + risk score)│
-                        └──────────────┘
-                               ▲
-                               │
-┌─────────────────┐     ┌──────────────┐
-│  Secret Canary  │     │   Sandbox    │
-│  Detection      │◀────│  + Shim      │
-└─────────────────┘     │ (fs/net/cp)  │
-                        └──────────────┘
-```
-
-## How it works
-
-1. **Lockfile analysis** — Parses `package-lock.json` v3 into a directed acyclic graph. Identifies which packages define npm **lifecycle** scripts the tool tracks (e.g. `preinstall` / `install` / `postinstall` / `prepack` / `postpack` / `prepublishOnly` / `prepare` and related hooks—see `LIFECYCLE_SCRIPT_NAMES` in `src/graph.ts`).
-2. **Sandboxed Install** — Creates a temp directory, copies `package.json` + `package-lock.json`, and runs `npm install` with:
-   - Fake environment variables (`NPM_TOKEN`, `AWS_ACCESS_KEY_ID`, `GITHUB_TOKEN`, `SSH_PRIVATE_KEY`) containing canary strings
-   - A Node.js runtime shim injected via `NODE_OPTIONS=--require` that monkey-patches `fs`, `http`, `https`, and `child_process` to log every call to a JSONL trace file
-3. **Trace Analysis** — Reads the JSONL trace, detects canary reads, network egress, file writes, and subprocess spawns
-4. **Blast Radius Mapping** — For every suspicious package, walks the dependency graph backward to find the root dependency that transitively introduced it
-5. **Report Generation** — Produces a single self-contained `installsentry-report.html` with:
-   - Interactive dependency graph (Cytoscape.js)
-   - Secret canary alerts
-   - Network egress log
-   - Blast-radius dependency paths
-   - CI gate status
-
-## Installation
-
-**Published package** (Node 20+):
+**Node.js 20+** and **npm** with a **`package-lock.json` (lockfile version 3)** at the project root you analyze.
 
 ```bash
 npm install -g installsentry
-# or, no global install:
-npx installsentry@latest <command>
 ```
 
-**From source:** clone, `npm ci && npm run build`, then `node dist/cli.js …` (see [At a glance](#at-a-glance)).
-
-## Usage
-
-### Scan
-
-List all packages with lifecycle scripts:
+Or run without a global install:
 
 ```bash
-installsentry scan ./my-project
+npx installsentry@latest --version
 ```
 
-### Run
+**Windows (PowerShell):** If `npx installsentry` is not found, use:
 
-Perform a sandboxed install and generate a report (HTML by default, optional SARIF).
+```powershell
+npx.cmd --yes installsentry@latest --version
+```
+
+or install locally: `npm i installsentry` then `npx.cmd installsentry` or `node node_modules\installsentry\dist\cli.js`.
+
+## Quick start
 
 ```bash
-installsentry run ./my-project -o report.html
-# Optional: SARIF 2.1.0, Docker runner, host allowlist
-installsentry run ./my-project -o report.html --sarif out.sarif --runner host
-installsentry run ./my-project -o report.html --runner docker --docker-image node:20-bookworm-slim
+# List packages (from the lockfile) that declare install-time scripts
+installsentry scan /path/to/your-app
+
+# Run a sandboxed copy of `npm install`, trace behavior, write a report
+installsentry run /path/to/your-app -o report.html
 ```
 
-**Docker runner:** requires [Docker](https://docs.docker.com/get-docker/) on `PATH`. The default image is `node:20-bookworm-slim`. The same temp project copy and trace file as the host path are used; the container only runs `npm install`. On **Windows**, use Docker Desktop and allow the temp drive to be shared if installs fail to find files.
+Open `report.html` in a browser. The report includes secret-canary hits, network egress, blast-radius paths, and an interactive dependency graph (large projects default to a **focused** view; use the graph menu to switch modes).
 
-### Network policy and CI mode
+## What it does
 
-- **Default (no allow list):** any outbound HTTP(S) in the trace fails `--ci` (in addition to secret canary hits). Use this for maximum strictness in fully offline or pre-vendorized scenarios.
-- **Allow list:** `installsentry run ... --ci --allow-hosts "registry.npmjs.org"` (comma-separated) so normal registry access does not fail the gate. You can set the same list in a project file: **`.installsentry.yaml`**, **`.installsentry.json`**, or `installsentry.json` (see [docs/samples/example.installsentry.yaml](docs/samples/example.installsentry.yaml)).
-- **Deny list:** `--deny-hosts` (or `ci.denyHosts` in config) always fails matching hosts even if allowlisted.
+- **Parses** `package-lock.json` v3 into a dependency graph and flags packages with **lifecycle** scripts (e.g. `preinstall` / `postinstall` / `prepare` / `prepack` / `postpack` / `prepublishOnly`, and related hooks).
+- **Runs** a fresh **`npm install`** in a **temporary copy** of your project (on the host, or optionally **inside Docker**).
+- **Injects** a small **Node shim** so filesystem reads, HTTP(S) traffic, and subprocess spawns from that install are logged. Fake canary values in the environment can be **detected** if a script reads or exfiltrates them.
+- **Writes** a self-contained **HTML report** and can emit **SARIF 2.1.0** for tools like GitHub code scanning.
+- **CI mode (`--ci`)** can **fail the process** if canary rules or your **network policy** are violated (see below).
+
+**What it is not:** a general malware scanner or a guarantee of safety. It is an **observational** tool for install-time behavior. Read the **[threat model](docs/THREAT-MODEL.md)** for scope, limits, and evasion.
+
+## CI, network policy, and SARIF
+
+- **`--ci`** — Exit with a non-zero code when the analysis fails your policy. By default, **any outbound HTTP(S)** in the trace counts as a failure (plus secret-canary rules). For real projects that must talk to the **registry**, use an **allow list** of hostnames.
+- **`--allow-hosts`** — Comma-separated hosts (e.g. `registry.npmjs.org`). You can set the same in a project config file: **`.installsentry.yaml`**, **`.installsentry.json`**, or `installsentry.json` (see [docs/samples/example.installsentry.yaml](docs/samples/example.installsentry.yaml)).
+- **`--deny-hosts`** — Hosts that always fail, even if allowlisted.
+- **`--sarif <file>`** — Write SARIF alongside the HTML report; useful with `upload-sarif` in GitHub Actions.
 
 ```bash
-installsentry run ./my-project --ci
-installsentry run ./my-project --ci --allow-hosts "registry.npmjs.org"
+installsentry run ./my-app --ci --allow-hosts "registry.npmjs.org" -o report.html --sarif results.sarif
 ```
 
-### Security documentation and samples
+## Docker (optional)
 
-- **[Threat model and limitations](docs/THREAT-MODEL.md)**
-- **[docs/samples/](docs/samples/)** — regenerate example HTML, policy template, and SARIF notes
-
-## Project structure
-
-```
-installsentry/
-├── .github/
-│   └── actions/installsentry/   # Composite “run this repo’s CLI” (needs prior build in workflow)
-├── docs/
-│   ├── THREAT-MODEL.md
-│   └── samples/            # Regenerated report + policy / SARIF notes
-├── src/
-│   ├── cli.ts, config.ts, network-policy.ts, sarif.ts, install-runner.ts, docker-runner.ts, …
-│   ├── lockfile.ts, graph.ts, sandbox.ts, report.ts, analyzer.ts, tracer.ts, types.ts, shim.cjs, …
-├── tests/
-│   ├── fixtures/ … malware-demo, lifecycle-coverage, adversarial/chdir-demo, …
-│   └── *.test.ts
-└── package.json
-```
-
-## Development
+Run the install step inside a container (requires [Docker](https://docs.docker.com/get-docker/) on `PATH`):
 
 ```bash
-# Install dependencies
-npm install
-
-# Build TypeScript
-npm run build
-
-# Watch mode
-npm run dev
-
-# Run tests (watch)
-npm test
-
-# CI-style one-shot: build, optional test fixture deps, vitest run, then typecheck
-npm run test:all
+installsentry run ./my-app -o report.html --runner docker --docker-image node:20-bookworm-slim
 ```
 
-## CI (GitHub Actions)
+On Windows, use Docker Desktop and ensure the temp directory volume is shareable if installs fail.
 
-On every push/PR to `main` or `master`, the workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `npm ci`, `npm run test:ci`, and `npm run lint` on Node **20** and **22** (ubuntu-latest). For a visual overview of the same steps:
+## Use in GitHub Actions
 
-```mermaid
-flowchart LR
-  push[push_or_PR]
-  gha[GitHub_Actions]
-  install[npm_ci]
-  test[test_ci]
-  pass[pass_or_fail]
-  push --> gha --> install --> test --> pass
-```
-
-### Reusable “run on a project” action (in this repository)
-
-In a **workflow in this repo** (or after checkout in another repo that contains a **built** `dist/`), you can use the composite action to run the CLI. Example: build first, then analyze a fixture.
+**Simplest:** use the published CLI with `npx` (no need to clone this repo):
 
 ```yaml
-# Example (conceptual) — your paths may differ; requires Node and a built `dist/`
-# See .github/actions/installsentry/action.yml for inputs: project-path, output, ci, allow-hosts, sarif-output, runner, docker-image
-- uses: actions/checkout@v4
 - uses: actions/setup-node@v4
   with:
     node-version: 20
-- run: npm ci && npm run build
-- uses: ./.github/actions/installsentry
-  with:
-    project-path: tests/fixtures/malware-demo
-    output: installsentry-out.html
-    ci: "false"
+- run: npx.cmd --yes installsentry@0.1.0 run ./my-app -o report.html
+  # Or: npx --yes installsentry@0.1.0 (macOS/Linux)
 ```
 
-For **SARIF upload to GitHub Code Scanning**, add a job step with `github/codeql-action/upload-sarif` (requires default `security-events: write` permission) and point to the `sarif-output` path. Published packages can instead run `npx installsentry@<version> run …` in a standard `run` step.
+To run the **composite action** in this repository (it builds the CLI from source in the workflow), see [`.github/actions/installsentry/action.yml`](.github/actions/installsentry/action.yml) and the note in [CONTRIBUTING.md](CONTRIBUTING.md#in-repo-github-action).
 
-## Publishing to npm (maintainers)
+## Example report
 
-**Full checklist:** [RELEASING.md](RELEASING.md). **Changelog:** [CHANGELOG.md](CHANGELOG.md).
+<p align="center">
+  <img src="docs/images/report-example.png" alt="InstallSentry HTML report: alerts, network list, and dependency graph" width="100%" />
+</p>
 
-Short version: `installsentry` is available on the public registry (verify with `npm view installsentry`). Log in with `npm login`, run `npm run test:all`, then `npm publish --access public` from a clean tree. `prepublishOnly` runs `test:ci` so broken builds are blocked. After publish, tag `v*.*.*` in git and [create a GitHub Release](https://github.com/anasm266/installsentry/releases).
+*Reference run on the canary demo scenario included in the GitHub repository.*
 
-## Why this exists
+## Limitations (short)
 
-npm lifecycle scripts execute during `npm install` with the same privileges as the developer's shell. Supply-chain attacks have used `postinstall` scripts to steal environment variables, exfiltrate data, and drop malware. InstallSentry makes this attack surface visible, traceable, and gateable in CI.
+| Area | Note |
+|------|------|
+| **Lockfile** | `package-lock.json` **v3** only. |
+| **Client** | **npm** install semantics; not pnpm/Yarn lockfiles in this version. |
+| **Attribution** | Package column is derived from **working directory** under the project root; scripts that **`chdir`** or spawn an unshimmed child **Node** can mis-attribute events. |
+| **Trust** | Use for visibility and policy gates, not as a replacement for full security review. |
 
-## Roadmap (high level)
+Details: **[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)** — samples and policy templates: **[docs/samples/](docs/samples/)**.
 
-- [x] Network allow / deny and config file; SARIF; Docker install runner; threat model; samples; local composite action; expanded lifecycle names in the graph; adversarial fixture scaffolds
-- [ ] pnpm / Yarn lockfile support
-- [ ] Deeper per-package tracing (e.g. child `node` with shim, or documented limits only)
-- [ ] Optional: standalone `installsentry-action` repo that wraps `npx` without a checkout
+## Documentation
+
+| Doc | Purpose |
+|-----|--------|
+| [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | What the tool can and cannot prove; evasion notes |
+| [docs/samples/](docs/samples/) | Config examples, SARIF, policy |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+
+## Contributing
+
+Pull requests and issue reports are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to build and test locally.
 
 ## License
 

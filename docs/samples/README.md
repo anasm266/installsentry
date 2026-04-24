@@ -1,48 +1,29 @@
-# Example reports and policy snippets
+# Config examples and policy
 
-## Regenerate sample HTML (malware demo)
+Use these patterns in **your own** project (the path you pass to `installsentry run`).
 
-From the **repository root** after a build:
+## Network policy
 
-```bash
-npm run build
-node dist/cli.js run tests/fixtures/malware-demo -o docs/samples/malware-demo-example.html
-```
+- **Strict (default for `--ci`):** any HTTP(S) from the traced install can fail the gate, unless you allow hosts.
+- **Allow list:** `installsentry run ./my-app --ci --allow-hosts "registry.npmjs.org"` (comma-separated).
+- **Deny list:** `--deny-hosts` (or `ci.denyHosts` in a config file) always fails those hosts.
 
-A committed `malware-demo-example.html` in this folder is a **static snapshot** for documentation; re-run the command to refresh it after report UI changes. This fixture includes intentional fake “secret” and outbound URL canaries for local testing only.
+## Config file
 
-## CI with a registry allowlist (optional)
+Copy [example.installsentry.yaml](example.installsentry.yaml) to your app root as **`.installsentry.yaml`**, or use **JSON** (`.installsentry.json` / `installsentry.json`) with the same `ci` keys.
 
-The default `--ci` mode flags **any** network egress, which is often too strict (npm talks to the registry). Use an allowlist, for example:
-
-```bash
-node dist/cli.js run ./path/to/your-app --ci --allow-hosts "registry.npmjs.org" -o report.html
-```
-
-## Config file: `.installsentry.yaml`
-
-Example at [`example.installsentry.yaml`](example.installsentry.yaml) (same keys in `.installsentry.json` or `installsentry.json` also work). Place the file in the project you are analyzing (the `<path>` passed to `run`).
-
-See the [threat model](../THREAT-MODEL.md) and the [GitHub Action](../../.github/actions/installsentry/action.yml) for `upload-sarif` and **network policy** context.
-
-## SARIF (optional)
+## SARIF
 
 ```bash
-node dist/cli.js run ./path/to/your-app -o report.html --sarif out.sarif
+installsentry run ./my-app -o report.html --sarif results.sarif
 ```
 
-SARIF uses the same network policy you pass on the CLI or in config, so `upload-sarif` and `--ci` stay consistent.
+SARIF uses the same network policy as `--ci` (CLI flags and/or config file).
 
-## Network policy anchor
+## GitHub Code Scanning
 
-- **Strict (default, no `allowHosts` in config, no `--allow-hosts`)**: any outbound request fails `--ci` (in addition to secret canary hits).
-- **Allowlist**: set `--allow-hosts` or `ci.allowHosts` in a config file. Hosts are compared case-insensitively, with optional port stripped (`host:443` -> `host`).
-- **Denylist**: `ci.denyHosts` or `--deny-hosts` always fails a matching host even if on the allow list.
+Use `actions/upload-sarif` with the file from `installsentry run … --sarif`. The [main README](https://github.com/anasm266/installsentry#use-in-github-actions) has a `npx` example; the [composite action](https://github.com/anasm266/installsentry/blob/master/.github/actions/installsentry/action.yml) offers an optional `sarif-output` input if you build the tool from a checkout in CI.
 
-```yaml
-# Reference only — use example.installsentry.yaml in the repo for a real file
-ci:
-  allowHosts:
-    - registry.npmjs.org
-  denyHosts: []
-```
+## Reference canary scenario
+
+The repository includes a **test-only** demo that simulates canary exfiltration for **local** learning. It is not part of the npm package. To run it, clone the repo and use the path `tests/fixtures/malware-demo` as in the main README example screenshot. Do not use that scenario against systems you do not own.

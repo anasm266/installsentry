@@ -16,7 +16,7 @@ The **lockfile** (`package-lock.json` v3, **npm** only in this project) is turne
 ## What is inferred vs. proven
 
 - **Blast paths** are graph walks from a suspicious node; they are only as good as the lockfile and attribution.
-- **“Lifecycle scripts” in the graph** are detected by reading `package.json` in each lockfile path and looking for **script names** InstallSentry treats as install-time (see [graph.ts](../src/graph.ts)). The tracer does not prove npm actually ran a given script in your environment, only that the project declares it.
+- **“Lifecycle scripts” in the graph** are detected by reading `package.json` in each lockfile path and looking for **script names** in `LIFECYCLE_SCRIPT_NAMES` ([`src/graph.ts`](../src/graph.ts)). The tracer does not prove npm actually ran a given script in your environment, only that the project declares it.
 
 ## Out of scope and known blind spots
 
@@ -25,7 +25,7 @@ The **lockfile** (`package-lock.json` v3, **npm** only in this project) is turne
 3. **Non-Node I/O** — The shim only patches Node’s built-in modules. Operations through native add-ons, direct syscalls, or unhooked code paths are invisible.
 4. **Malicious or altered registry** — A compromised or MITM’d registry can serve different tarballs; this tool does not verify **integrity** of tarballs from the network beyond your lockfile metadata.
 5. **pnpm / Yarn** — This codebase targets **npm** and **lockfile v3** only. Other clients are not supported in the current parser and sandbox story.
-6. **Policy vs. “any network”** — With a **host allowlist** in CI, traffic to the registry and other allowlisted hosts is permitted for the **gate**; other traffic still appears in the report as network egress. Denylist always fails matching hosts. See [docs/samples/README.md](samples/README.md#network-policy-anchor) and the main [README](../README.md) for flags and the [`example.installsentry.yaml`](samples/example.installsentry.yaml) template.
+6. **Policy vs. “any network”** — With a **host allowlist** in CI, traffic to the registry and other allowlisted hosts is permitted for the **gate**; other traffic still appears in the report as network egress. Denylist always fails matching hosts. See [Config examples](samples/README.md) and [example.installsentry.yaml](samples/example.installsentry.yaml).
 7. **Docker runner** — Optional. Isolation depends on the container runtime and how volumes are mounted; it is **defense in depth**, not a formal sandbox proof.
 
 ## Responsible use
