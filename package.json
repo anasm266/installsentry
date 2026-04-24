@@ -1,6 +1,6 @@
 {
   "name": "installsentry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Supply-chain blast-radius visualizer that traces npm install-time lifecycle scripts, file/network access, and secret-canary reads.",
   "main": "dist/cli.js",

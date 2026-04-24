@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Lockfile, LockfilePackage } from './types.js';
+import { parseJsonUtf8 } from './json-utf8.js';
 
 export function parseLockfile(projectPath: string): Lockfile {
   const lockfilePath = resolve(projectPath, 'package-lock.json');
   const content = readFileSync(lockfilePath, 'utf-8');
-  const parsed = JSON.parse(content) as Lockfile;
+  const parsed = parseJsonUtf8<Lockfile>(content);
 
   if (parsed.lockfileVersion !== 3) {
     throw new Error(

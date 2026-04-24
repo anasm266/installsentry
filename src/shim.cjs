@@ -5,6 +5,10 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+
+function stripBom(s) {
+  return s.length > 0 && s.codePointAt(0) === 0xfeff ? s.slice(1) : s;
+}
 const http = require('node:http');
 const https = require('node:https');
 const cp = require('node:child_process');
@@ -12,7 +16,7 @@ const cp = require('node:child_process');
 const CANARY_SUBSTRINGS = (() => {
   try {
     const p = path.join(__dirname, 'canary-substrings.json');
-    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+    return JSON.parse(stripBom(fs.readFileSync(p, 'utf-8')));
   } catch {
     return [
       'fake_canary_npm_token',

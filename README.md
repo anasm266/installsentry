@@ -80,8 +80,8 @@ On Windows, use Docker Desktop and ensure the temp directory volume is shareable
 - uses: actions/setup-node@v4
   with:
     node-version: 20
-- run: npx.cmd --yes installsentry@0.1.0 run ./my-app -o report.html
-  # Or: npx --yes installsentry@0.1.0 (macOS/Linux)
+- run: npx.cmd --yes installsentry@0.1.1 run ./my-app -o report.html
+  # Or: npx --yes installsentry@0.1.1 (macOS/Linux)
 ```
 
 To run the **composite action** in this repository (it builds the CLI from source in the workflow), see [`.github/actions/installsentry/action.yml`](.github/actions/installsentry/action.yml) and the note in [CONTRIBUTING.md](CONTRIBUTING.md#in-repo-github-action).

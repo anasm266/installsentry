@@ -4,7 +4,7 @@ import type { AnalysisResult } from './types.js';
 import { getNetworkFindingsForCi, type ResolvedNetworkPolicy } from './network-policy.js';
 
 const TOOL_NAME = 'InstallSentry';
-const TOOL_VERSION = '0.1.0';
+const TOOL_VERSION = '0.1.1';
 const R_SECRET = 'installsentry/secret-canary';
 const R_NETWORK = 'installsentry/network-egress';
 

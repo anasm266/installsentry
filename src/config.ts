@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { parseJsonUtf8, stripBom } from './json-utf8.js';
 
 export interface InstallsentryConfig {
   /** Network policy; see README */
@@ -21,9 +22,9 @@ export function loadInstallsentryConfig(projectPath: string): InstallsentryConfi
     if (!existsSync(f)) continue;
     const raw = readFileSync(f, 'utf-8');
     if (name.endsWith('.json')) {
-      return JSON.parse(raw) as InstallsentryConfig;
+      return parseJsonUtf8<InstallsentryConfig>(raw);
     }
-    return (parseYaml(raw) || {}) as InstallsentryConfig;
+    return (parseYaml(stripBom(raw)) || {}) as InstallsentryConfig;
   }
   return null;
 }

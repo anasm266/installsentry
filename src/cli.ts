@@ -11,6 +11,7 @@ import { readTrace } from './tracer.js';
 import { analyzeTrace } from './analyzer.js';
 import { generateReport } from './report.js';
 import { loadInstallsentryConfig } from './config.js';
+import { parseJsonUtf8 } from './json-utf8.js';
 import { mergeNetworkPolicy, ciShouldFail } from './network-policy.js';
 import { writeSarifToFile } from './sarif.js';
 
@@ -19,7 +20,7 @@ const program = new Command();
 program
   .name('installsentry')
   .description('Supply-chain blast-radius visualizer for npm installs')
-  .version('0.1.0');
+  .version('0.1.1');
 
 program
   .command('scan')
@@ -72,7 +73,9 @@ program
       }
     ) => {
       const fullPath = resolve(projectPath);
-      const rootPkg = JSON.parse(readFileSync(resolve(fullPath, 'package.json'), 'utf-8')) as {
+      const rootPkg = parseJsonUtf8(
+        readFileSync(resolve(fullPath, 'package.json'), 'utf-8')
+      ) as {
         name?: string;
         version?: string;
       };

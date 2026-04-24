@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Lockfile, LockfilePackage, DependencyGraph, GraphNode, GraphEdge } from './types.js';
 import { getPackageNameFromPath } from './lockfile.js';
+import { parseJsonUtf8 } from './json-utf8.js';
 
 const LIFECYCLE_SCRIPT_NAMES = new Set([
   'preinstall',
@@ -26,7 +27,7 @@ function readPackageJsonScripts(projectPath: string, packagePath: string): Recor
   if (!existsSync(pkgJsonPath)) return undefined;
   try {
     const content = readFileSync(pkgJsonPath, 'utf-8');
-    const pkg = JSON.parse(content) as { scripts?: Record<string, string> };
+    const pkg = parseJsonUtf8(content) as { scripts?: Record<string, string> };
     return pkg.scripts;
   } catch {
     return undefined;
