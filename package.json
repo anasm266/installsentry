@@ -1,0 +1,37 @@
+{
+  "name": "installsentry",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Supply-chain blast-radius visualizer that traces npm install-time lifecycle scripts, file/network access, and secret-canary reads.",
+  "main": "dist/cli.js",
+  "bin": {
+    "installsentry": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "npm",
+    "security",
+    "supply-chain",
+    "lifecycle-scripts",
+    "dependency-graph"
+  ],
+  "author": "anas",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "esbuild": "0.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
