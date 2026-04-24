@@ -8,8 +8,9 @@
     "installsentry": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-shim-assets.mjs",
     "dev": "tsc --watch",
+    "pretest": "npm run build && node scripts/ensure-test-fixture-deps.mjs",
     "test": "vitest",
     "lint": "tsc --noEmit"
   },

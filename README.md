@@ -11,7 +11,7 @@ Every time you run `npm install`, packages can execute lifecycle scripts (`prein
 
 - **Scans** `package-lock.json` for packages with lifecycle scripts
 - **Sandboxes** `npm install` in a disposable temp directory with fake secrets
-- **Traces** `fs.readFile`, `http.request`, `child_process.spawn` calls via a runtime shim
+- **Traces** `fs.readFile`, `http`/`https` (including `get`), `child_process.spawn` calls via a runtime shim; canary substrings in outbound request URLs are treated as secret exfil
 - **Detects** if any package reads your fake canary tokens (npm, AWS, GitHub, SSH)
 - **Maps** every suspicious event back to the root dependency that introduced it
 - **Reports** everything in a single interactive HTML file with dependency graph, timeline, and blast-radius paths
@@ -29,6 +29,17 @@ npx installsentry run ./my-project --output report.html
 # CI mode — exits non-zero if anything suspicious happens
 npx installsentry run ./my-project --ci
 ```
+
+### Malicious demo fixture (canary exfil)
+
+The repo includes [`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/): a root project with a `file:` dependency whose `postinstall` reads `AWS_SECRET_ACCESS_KEY` and issues an HTTPS request with the canary in the query string. The shim flags canary substrings in outbound URLs as **Secret Canary** hits (and still logs **Network Egress**). After `npm run build`:
+
+```bash
+node dist/cli.js run tests/fixtures/malware-demo -o malware-report.html
+node dist/cli.js run tests/fixtures/malware-demo --ci
+```
+
+The last command exits with a non-zero status: both secret exfil and network are detected. Note: event `package` in the trace is not yet attributed per `node_modules` entry (shim default), so the report sidebar is the most reliable “money” view; graph node highlighting for the malicious package is a follow-up.
 
 ## Architecture
 
@@ -116,8 +127,11 @@ installsentry/
 │   ├── report.ts           # HTML report generator
 │   └── types.ts            # Shared TypeScript interfaces
 ├── tests/
-│   └── fixtures/
-│       └── test-project/   # Sample project for manual testing
+│   ├── fixtures/
+│   │   ├── test-project/   # Sample project (lockfile + graph tests)
+│   │   └── malware-demo/  # file: local package; postinstall simulates env exfil
+│   └── *.test.ts
+├── scripts/                # build helpers (shim + canary copy, test fixture deps)
 ├── package.json
 ├── tsconfig.json
 └── README.md

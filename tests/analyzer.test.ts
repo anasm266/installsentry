@@ -47,6 +47,30 @@ describe('analyzer', () => {
     expect(result.networkRequests[0].host).toBe('evil.com');
   });
 
+  it('treats canary substrings in HTTP URLs as secret exfil', () => {
+    const lockfile = parseLockfile('tests/fixtures/test-project');
+    const graph = buildGraph('tests/fixtures/test-project', lockfile);
+    const exfilUrl = 'https://example.com/?k=fake_canary_aws_secret';
+    const events: TraceEvent[] = [
+      {
+        type: 'http.request',
+        package: 'node_modules/evil-pkg',
+        script: 'postinstall',
+        timestamp: Date.now(),
+        details: {
+          url: exfilUrl,
+          method: 'GET',
+          host: 'example.com',
+          canaries: ['fake_canary_aws_secret'],
+        },
+      },
+    ];
+    const result = analyzeTrace(events, graph);
+    expect(result.secretHits.length).toBe(1);
+    expect(result.secretHits[0].filePath).toBe(exfilUrl);
+    expect(result.networkRequests.length).toBe(1);
+  });
+
   it('calculates blast radius paths', () => {
     const lockfile = parseLockfile('tests/fixtures/test-project');
     const graph = buildGraph('tests/fixtures/test-project', lockfile);

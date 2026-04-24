@@ -1,0 +1,7 @@
+[
+  "fake_canary_npm_token",
+  "fake_canary_aws_key",
+  "fake_canary_aws_secret",
+  "fake_canary_github_token",
+  "fake_canary_ssh_key"
+]

@@ -38,11 +38,21 @@ export function analyzeTrace(events: TraceEvent[], graph: DependencyGraph): Anal
         break;
       }
       case 'http.request': {
+        const url = String(event.details.url || '');
+        const canaries = (event.details.canaries as string[]) || [];
+        for (const canary of canaries) {
+          secretHits.push({
+            canary,
+            package: event.package || 'unknown',
+            filePath: url,
+            timestamp: event.timestamp,
+          });
+        }
         networkRequests.push({
           package: event.package || 'unknown',
           host: String(event.details.host || ''),
           method: String(event.details.method || 'GET'),
-          url: String(event.details.url || ''),
+          url,
           timestamp: event.timestamp,
         });
         break;

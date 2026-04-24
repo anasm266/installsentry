@@ -3,10 +3,26 @@
  * Must be CommonJS so we can monkey-patch built-in modules.
  */
 
+const path = require('node:path');
 const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const cp = require('node:child_process');
+
+const CANARY_SUBSTRINGS = (() => {
+  try {
+    const p = path.join(__dirname, 'canary-substrings.json');
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch {
+    return [
+      'fake_canary_npm_token',
+      'fake_canary_aws_key',
+      'fake_canary_aws_secret',
+      'fake_canary_github_token',
+      'fake_canary_ssh_key',
+    ];
+  }
+})();
 
 const TRACE_FILE = process.env.INSTALLSENTRY_TRACE_FILE;
 const CURRENT_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
@@ -34,14 +50,8 @@ function logEvent(type, details) {
 
 function isCanaryContent(data) {
   const hits = [];
-  const str = Buffer.isBuffer(data) ? data.toString('utf-8') : data;
-  const canaries = [
-    'fake_canary_npm_token',
-    'fake_canary_aws_key',
-    'fake_canary_github_token',
-    'fake_canary_ssh_key',
-  ];
-  for (const c of canaries) {
+  const str = Buffer.isBuffer(data) ? data.toString('utf-8') : String(data);
+  for (const c of CANARY_SUBSTRINGS) {
     if (str.includes(c)) hits.push(c);
   }
   return hits;
@@ -108,28 +118,63 @@ fs.appendFile = function (path, data, options, callback) {
 };
 
 // --- http.request / https.request ---
+function buildUrlString(protocol, options) {
+  if (typeof options === 'string') {
+    return options;
+  }
+  if (options && typeof options === 'object') {
+    if (options.href && typeof options.href === 'string') {
+      return options.href;
+    }
+    return `${protocol}://${options.hostname || options.host || 'localhost'}${options.path || '/'}`;
+  }
+  return String(options);
+}
+
 function patchRequest(mod, protocol) {
   const orig = mod.request;
   mod.request = function (options, callback) {
-    let url = '';
     let method = 'GET';
     let host = '';
 
-    if (typeof options === 'string') {
-      url = options;
-    } else {
-      url = `${protocol}://${options.hostname || options.host || 'localhost'}${options.path || '/'}`;
+    const url = buildUrlString(protocol, options);
+
+    if (options && typeof options === 'object' && typeof options !== 'string') {
       method = options.method || 'GET';
       host = options.hostname || options.host || 'localhost';
+    } else {
+      try {
+        const u = new URL(url);
+        method = 'GET';
+        host = u.host;
+      } catch {
+        host = 'localhost';
+        method = 'GET';
+      }
     }
 
-    logEvent('http.request', { url, method, host });
+    const forScan = url;
+    const canaries = isCanaryContent(forScan);
+
+    logEvent('http.request', { url, method, host, canaries });
     return orig.call(mod, options, callback);
   };
 }
 
 patchRequest(http, 'http');
 patchRequest(https, 'https');
+
+// Node's http.get / https.get call the module-local `request`, not exports.request, so
+// a patched `request` export is never used by `get` unless we replace `get` too.
+function rewireGet(mod) {
+  mod.get = function (input, options, callback) {
+    const req = mod.request(input, options, callback);
+    req.end();
+    return req;
+  };
+}
+rewireGet(http);
+rewireGet(https);
 
 // --- child_process.spawn / exec ---
 const origSpawn = cp.spawn;

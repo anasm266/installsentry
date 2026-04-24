@@ -8,6 +8,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import * as cp from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+import CANARY_SUBSTRINGS from './canary-substrings.json' with { type: 'json' };
 
 const TRACE_FILE = process.env.INSTALLSENTRY_TRACE_FILE;
 const CURRENT_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
@@ -37,16 +38,12 @@ function logEvent(type: string, details: Record<string, unknown>) {
 const originalReadFile = fs.readFile;
 const originalReadFileSync = fs.readFileSync;
 
+const CANARY_LIST = CANARY_SUBSTRINGS as string[];
+
 function isCanaryContent(data: string | Buffer): string[] {
   const hits: string[] = [];
-  const str = Buffer.isBuffer(data) ? data.toString('utf-8') : data;
-  const canaries = [
-    'fake_canary_npm_token',
-    'fake_canary_aws_key',
-    'fake_canary_github_token',
-    'fake_canary_ssh_key',
-  ];
-  for (const c of canaries) {
+  const str = Buffer.isBuffer(data) ? data.toString('utf-8') : String(data);
+  for (const c of CANARY_LIST) {
     if (str.includes(c)) hits.push(c);
   }
   return hits;
@@ -123,28 +120,67 @@ const originalAppendFile = fs.appendFile;
 };
 
 // --- http.request / https.request ---
+function buildUrlString(protocol: string, options: unknown): string {
+  if (typeof options === 'string') {
+    return options;
+  }
+  if (options && typeof options === 'object' && 'href' in (options as object)) {
+    const h = (options as { href?: string }).href;
+    if (h && typeof h === 'string') return h;
+  }
+  if (options && typeof options === 'object') {
+    const o = options as {
+      hostname?: string;
+      host?: string;
+      path?: string;
+    };
+    return `${protocol}://${o.hostname || o.host || 'localhost'}${o.path || '/'}`;
+  }
+  return String(options);
+}
+
 function patchRequest(mod: typeof http | typeof https, protocol: string) {
   const orig = mod.request;
   (mod as any).request = function (options: any, callback?: any) {
-    let url = '';
+    const url = buildUrlString(protocol, options);
     let method = 'GET';
     let host = '';
 
-    if (typeof options === 'string') {
-      url = options;
+    if (options && typeof options === 'object' && typeof options !== 'string') {
+      const o = options as { method?: string; hostname?: string; host?: string };
+      method = o.method || 'GET';
+      host = o.hostname || o.host || 'localhost';
     } else {
-      url = `${protocol}://${options.hostname || options.host || 'localhost'}${options.path || '/'}`;
-      method = options.method || 'GET';
-      host = options.hostname || options.host || 'localhost';
+      try {
+        const u = new URL(url);
+        method = 'GET';
+        host = u.host;
+      } catch {
+        host = 'localhost';
+        method = 'GET';
+      }
     }
 
-    logEvent('http.request', { url, method, host });
+    const canaries = isCanaryContent(url);
+    logEvent('http.request', { url, method, host, canaries });
     return (orig as any).call(mod, options, callback);
   };
 }
 
 patchRequest(http, 'http');
 patchRequest(https, 'https');
+
+// Node's get() calls the internal `request` binding, not the patched export — rewire
+// it to `mod.request` (our patched function).
+function rewireGet(mod: typeof http | typeof https) {
+  (mod as any).get = function (input: any, options?: any, callback?: any) {
+    const req = (mod as any).request(input, options, callback);
+    req.end();
+    return req;
+  };
+}
+rewireGet(http);
+rewireGet(https);
 
 // --- child_process.spawn / exec ---
 const origSpawn = cp.spawn;

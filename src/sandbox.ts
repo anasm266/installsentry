@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, cpSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface SandboxResult {
   tempDir: string;
@@ -36,11 +37,20 @@ export async function runSandboxedInstall(options: SandboxOptions): Promise<Sand
   // Copy package manifests
   cpSync(resolve(projectPath, 'package.json'), join(tempDir, 'package.json'));
   cpSync(resolve(projectPath, 'package-lock.json'), join(tempDir, 'package-lock.json'));
+  // file:../ local packages (e.g. monorepo-style fixtures)
+  const packagesDir = resolve(projectPath, 'packages');
+  if (existsSync(packagesDir)) {
+    cpSync(packagesDir, join(tempDir, 'packages'), { recursive: true });
+  }
 
-  // Prepare shim: copy from dist/shim.cjs (CommonJS so we can monkey-patch)
-  const shimSrc = resolve(process.cwd(), 'dist', 'shim.cjs');
+  // Shim: copy from dist/ next to compiled sandbox.js (not process.cwd, so tests/CLI from any directory work)
+  const distDir = dirname(fileURLToPath(import.meta.url));
+  const shimSrc = join(distDir, 'shim.cjs');
+  const canarySrc = join(distDir, 'canary-substrings.json');
   const shimDest = join(tempDir, 'installsentry-shim.cjs');
+  const canaryDest = join(tempDir, 'canary-substrings.json');
   cpSync(shimSrc, shimDest);
+  cpSync(canarySrc, canaryDest);
 
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
