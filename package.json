@@ -10,7 +10,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
@@ -43,7 +44,6 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^12.0.0",
-    "esbuild": "0.28.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {

@@ -11,7 +11,14 @@
 - **Problem:** `npm install` can run **lifecycle scripts** in dependencies with access to your filesystem, env, and network. That risk is **opaque** if you only read `package.json` at the top level.
 - **What this is:** A **CLI** that (1) parses your **`package-lock.json` v3** into a graph, (2) runs a **sandboxed** `npm install` (host or **optional Docker**) with **canary** secrets, (3) loads a **Node shim** (`NODE_OPTIONS=--require`) to log I/O, (4) writes an **HTML report** and optional **SARIF 2.1.0**, and (5) an optional **install-time gate** (`--ci`) with **strict or allowlisted** network policy. See the **[threat model](docs/THREAT-MODEL.md)** for what is and is not guaranteed.
 
-**Try it in three steps** (from a clone; `npx` works after the package is **published** to npm):
+**Try it (from npm, after [publish](RELEASING.md)):**
+
+```bash
+npx installsentry@latest scan ./path-to-your-app
+npx installsentry@latest run ./path-to-your-app -o report.html
+```
+
+**Or from a clone (contributors / latest `main`):**
 
 ```bash
 git clone https://github.com/anasm266/installsentry.git && cd installsentry
@@ -112,15 +119,15 @@ The last command exits with a non-zero status: both secret exfil and network are
 
 ## Installation
 
-From the registry (after [publishing](#publishing-to-npm-optional) or if the name is available):
+**Published package** (Node 20+):
 
 ```bash
 npm install -g installsentry
-# or
-npx installsentry <command>
+# or, no global install:
+npx installsentry@latest <command>
 ```
 
-From source, use `node dist/cli.js` after `npm run build` (see [At a glance](#at-a-glance)).
+**From source:** clone, `npm ci && npm run build`, then `node dist/cli.js …` (see [At a glance](#at-a-glance)).
 
 ## Usage
 
@@ -233,13 +240,11 @@ In a **workflow in this repo** (or after checkout in another repo that contains 
 
 For **SARIF upload to GitHub Code Scanning**, add a job step with `github/codeql-action/upload-sarif` (requires default `security-events: write` permission) and point to the `sarif-output` path. Published packages can instead run `npx installsentry@<version> run …` in a standard `run` step.
 
-## Publishing to npm (optional)
+## Publishing to npm (maintainers)
 
-1. **Name:** Check if `installsentry` is free: `npm view installsentry` — if taken, publish under a **scoped** name in `package.json` (e.g. `@anasm266/installsentry`) and set `"publishConfig": { "access": "public" }`.
-2. **Verify:** `npm login` / `npm whoami`, then `npm pack --dry-run` to inspect the tarball (only `dist/`, `README`, `LICENSE` by `files` in [package.json](package.json), plus the bin).
-3. **Release:** `npm publish` (from a clean `git` tree at the version in `package.json`).
+**Full checklist:** [RELEASING.md](RELEASING.md). **Changelog:** [CHANGELOG.md](CHANGELOG.md).
 
-`prepublishOnly` runs the same checks as `npm run test:ci` so a broken build cannot be published by mistake.
+Short version: `installsentry` is available on the public registry (verify with `npm view installsentry`). Log in with `npm login`, run `npm run test:all`, then `npm publish --access public` from a clean tree. `prepublishOnly` runs `test:ci` so broken builds are blocked. After publish, tag `v*.*.*` in git and [create a GitHub Release](https://github.com/anasm266/installsentry/releases).
 
 ## Why this exists
 
@@ -250,7 +255,7 @@ npm lifecycle scripts execute during `npm install` with the same privileges as t
 - [x] Network allow / deny and config file; SARIF; Docker install runner; threat model; samples; local composite action; expanded lifecycle names in the graph; adversarial fixture scaffolds
 - [ ] pnpm / Yarn lockfile support
 - [ ] Deeper per-package tracing (e.g. child `node` with shim, or documented limits only)
-- [ ] Optional: publish a standalone `installsentry-action` repo for `npx` consumers without a checkout
+- [ ] Optional: standalone `installsentry-action` repo that wraps `npx` without a checkout
 
 ## License
 
