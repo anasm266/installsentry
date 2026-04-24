@@ -7,12 +7,28 @@
   "bin": {
     "installsentry": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anasm266/installsentry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anasm266/installsentry/issues"
+  },
+  "homepage": "https://github.com/anasm266/installsentry#readme",
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-shim-assets.mjs",
     "dev": "tsc --watch",
     "pretest": "npm run build && node scripts/ensure-test-fixture-deps.mjs",
     "test": "vitest",
-    "lint": "tsc --noEmit"
+    "test:ci": "npm run build && node scripts/ensure-test-fixture-deps.mjs && vitest run",
+    "test:all": "npm run test:ci && npm run lint",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run test:ci"
   },
   "keywords": [
     "npm",

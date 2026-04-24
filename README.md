@@ -2,8 +2,27 @@
 
 > Supply-chain blast-radius visualizer that traces npm install-time lifecycle scripts, file/network access, and secret-canary reads.
 
+[![CI](https://github.com/anasm266/installsentry/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/anasm266/installsentry/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
+
+## At a glance
+
+- **Problem:** `npm install` can run **lifecycle scripts** in dependencies with access to your filesystem, env, and network. That risk is **opaque** if you only read `package.json` at the top level.
+- **What this is:** A **CLI** that (1) parses your **`package-lock.json` v3** into a graph, (2) runs a **sandboxed** `npm install` with **canary** secrets, (3) loads a **Node shim** (`NODE_OPTIONS=--require`) to log I/O, (4) writes a single **HTML report** and an optional **install-time gate** (`--ci`).
+
+**Try it in three steps** (from a clone; `npx` works after the package is **published** to npm):
+
+```bash
+git clone https://github.com/anasm266/installsentry.git && cd installsentry
+npm ci && npm run build
+node dist/cli.js scan ./path-to-your-app
+node dist/cli.js run ./path-to-your-app -o report.html
+```
+
+**Limitations (read before trusting it for production):** only **`package-lock.json` lockfileVersion 3**; **npm** (not pnpm / Yarn for the lockfile layer yet); **strict** `--ci` (e.g. normal **registry** traffic can fail the gate); trace **package** attribution in the report is still **coarse**; the tool is **observational**, not a full static malware guarantee. For a deliberate exfil test case, see **[`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/)** below.
+
+**Security & responsible use:** The [malware-demo](#malicious-demo-fixture-canary-exfil) fixture is for **local testing and learning** on machines you are allowed to use. Do not point this tool (or the fixture) at systems you do not own, and do not use it to develop or deliver harmful code. InstallSentry is an **educational / research** tool; it is not a substitute for a commercial malware scanner, dependency policy, or formal supply-chain program.
 
 ## What it does
 
@@ -80,11 +99,15 @@ The last command exits with a non-zero status: both secret exfil and network are
 
 ## Installation
 
+From the registry (after [publishing](#publishing-to-npm-optional) or if the name is available):
+
 ```bash
 npm install -g installsentry
 # or
 npx installsentry <command>
 ```
+
+From source, use `node dist/cli.js` after `npm run build` (see [At a glance](#at-a-glance)).
 
 ## Usage
 
@@ -149,9 +172,34 @@ npm run build
 # Watch mode
 npm run dev
 
-# Run tests
+# Run tests (watch)
 npm test
+
+# CI-style one-shot: build, optional test fixture deps, vitest run, then typecheck
+npm run test:all
 ```
+
+## CI (GitHub Actions)
+
+On every push/PR to `main` or `master`, the workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `npm ci`, `npm run test:ci`, and `npm run lint` on Node **20** and **22** (ubuntu-latest). For a visual overview of the same steps:
+
+```mermaid
+flowchart LR
+  push[push_or_PR]
+  gha[GitHub_Actions]
+  install[npm_ci]
+  test[test_ci]
+  pass[pass_or_fail]
+  push --> gha --> install --> test --> pass
+```
+
+## Publishing to npm (optional)
+
+1. **Name:** Check if `installsentry` is free: `npm view installsentry` — if taken, publish under a **scoped** name in `package.json` (e.g. `@anasm266/installsentry`) and set `"publishConfig": { "access": "public" }`.
+2. **Verify:** `npm login` / `npm whoami`, then `npm pack --dry-run` to inspect the tarball (only `dist/`, `README`, `LICENSE` by `files` in [package.json](package.json), plus the bin).
+3. **Release:** `npm publish` (from a clean `git` tree at the version in `package.json`).
+
+`prepublishOnly` runs the same checks as `npm run test:ci` so a broken build cannot be published by mistake.
 
 ## Why this exists
 
