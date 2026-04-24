@@ -1,0 +1,8 @@
+{
+  "name": "chdir-adversarial-root",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "chdir-pkg": "file:./packages/chdir-pkg"
+  }
+}

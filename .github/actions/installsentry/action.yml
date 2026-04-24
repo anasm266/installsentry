@@ -1,0 +1,71 @@
+name: 'InstallSentry run'
+description: 'Run a sandboxed npm install with InstallSentry. Requires a prior job step that runs npm ci and npm run build in this repository (so dist/ exists), or npx from npm after publish.'
+author: 'anas'
+
+inputs:
+  project-path:
+    required: true
+    description: 'Path to a project with package-lock.json v3 (relative to the workspace root).'
+  output:
+    required: false
+    default: 'installsentry-report.html'
+    description: 'HTML report path (relative to the workspace root unless absolute).'
+  ci:
+    required: false
+    default: 'false'
+    description: "If 'true', fail the step on CI policy violations (secrets, or disallowed network)."
+  allow-hosts:
+    required: false
+    default: ''
+    description: 'Comma-separated host allowlist (CLI --allow-hosts).'
+  deny-hosts:
+    required: false
+    default: ''
+    description: 'Comma-separated host deny list (CLI --deny-hosts).'
+  sarif-output:
+    required: false
+    default: ''
+    description: 'Optional path for SARIF 2.1.0 (relative to workspace), for upload-sarif or actions/upload-artifact.'
+  runner:
+    required: false
+    default: 'host'
+    description: "host or docker"
+  docker-image:
+    required: false
+    default: 'node:20-bookworm-slim'
+    description: "Used when runner is docker (CLI --docker-image)."
+
+outputs:
+  report:
+    description: 'HTML report path (input output).'
+    value: ${{ inputs.output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run InstallSentry
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+        OUT_HTML: ${{ inputs.output }}
+        CI_FLAG: ${{ inputs.ci }}
+        ALLOW: ${{ inputs.allow-hosts }}
+        DENY: ${{ inputs.deny-hosts }}
+        SARIF_OUT: ${{ inputs.sarif-output }}
+        RUNNER_N: ${{ inputs.runner }}
+        DOCKER_IMG: ${{ inputs.docker-image }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        CLI="${ACTION_PATH}/../../../dist/cli.js"
+        P="$GITHUB_WORKSPACE/${PROJECT_PATH}"
+        O="${OUT_HTML}"
+        if [[ "$O" != /* ]]; then O="$GITHUB_WORKSPACE/$O"; fi
+        args=(run "$P" -o "$O")
+        if [ "$CI_FLAG" = "true" ]; then args+=(--ci); fi
+        if [ -n "$ALLOW" ]; then args+=(--allow-hosts "$ALLOW"); fi
+        if [ -n "$DENY" ]; then args+=(--deny-hosts "$DENY"); fi
+        if [ -n "$SARIF_OUT" ]; then args+=(--sarif "$GITHUB_WORKSPACE/$SARIF_OUT"); fi
+        args+=(--runner "$RUNNER_N")
+        if [ "$RUNNER_N" = "docker" ] && [ -n "$DOCKER_IMG" ]; then args+=(--docker-image "$DOCKER_IMG"); fi
+        node "$CLI" "${args[@]}"

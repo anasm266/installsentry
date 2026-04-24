@@ -1,0 +1,8 @@
+{
+  "name": "lifecycle-coverage-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "extra-lifecycle": "file:./packages/extra-lifecycle"
+  }
+}

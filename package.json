@@ -29,7 +29,8 @@
     "test:all": "npm run test:ci && npm run lint",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run test:ci",
-    "docs:screenshot": "npm run build && node dist/cli.js run tests/fixtures/malware-demo -o .tmp/malware-report.html && node scripts/capture-readme-screenshot.mjs"
+    "docs:screenshot": "npm run build && node dist/cli.js run tests/fixtures/malware-demo -o .tmp/malware-report.html && node scripts/capture-readme-screenshot.mjs",
+    "docs:sample": "npm run build && node dist/cli.js run tests/fixtures/malware-demo -o docs/samples/malware-demo-example.html"
   },
   "keywords": [
     "npm",
@@ -42,7 +43,8 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^12.0.0",
-    "esbuild": "0.28.0"
+    "esbuild": "0.28.0",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",

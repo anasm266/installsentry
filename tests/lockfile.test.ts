@@ -36,4 +36,13 @@ describe('graph builder', () => {
     const paths = findPathsToRoot(graph, 'node_modules/esbuild');
     expect(paths.length).toBeGreaterThan(0);
   });
+
+  it('treats prepack, postpack, prepublishOnly as lifecycle scripts in graph', () => {
+    const root = 'tests/fixtures/lifecycle-coverage';
+    const lockfile = parseLockfile(root);
+    const graph = buildGraph(root, lockfile);
+    const p = graph.nodes.get('packages/extra-lifecycle');
+    expect(p).toBeDefined();
+    expect(p!.hasLifecycleScripts).toBe(true);
+  });
 });

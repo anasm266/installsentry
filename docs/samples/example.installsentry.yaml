@@ -1,0 +1,7 @@
+# Copy to the root of a project you analyze, as `.installsentry.yaml` (or merge keys into .installsentry.json).
+# Optional: `ci.allowHosts` enables allowlist mode for `installsentry run --ci` and SARIF.
+ci:
+  allowHosts:
+    - registry.npmjs.org
+  # denyHosts:
+  #   - example.com

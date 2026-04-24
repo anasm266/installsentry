@@ -1,0 +1,10 @@
+{
+  "name": "extra-lifecycle",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prepack": "node -e \"0\"",
+    "postpack": "node -e \"0\"",
+    "prepublishOnly": "node -e \"0\""
+  }
+}
