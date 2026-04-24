@@ -56,7 +56,9 @@ export async function runSandboxedInstall(options: SandboxOptions): Promise<Sand
     ...process.env as Record<string, string>,
     ...SECRET_CANARIES,
     INSTALLSENTRY_TRACE_FILE: traceFile,
+    // Fallback when INSTALLSENTRY_PROJECT_ROOT is missing (e.g. old shims)
     INSTALLSENTRY_PACKAGE_NAME: options.packageName || 'root',
+    INSTALLSENTRY_PROJECT_ROOT: tempDir,
     INSTALLSENTRY_SCRIPT_NAME: options.scriptName || 'install',
     NODE_OPTIONS: `--require ${shimDest}`,
   };

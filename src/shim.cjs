@@ -25,18 +25,38 @@ const CANARY_SUBSTRINGS = (() => {
 })();
 
 const TRACE_FILE = process.env.INSTALLSENTRY_TRACE_FILE;
-const CURRENT_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
+const LEGACY_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
 const CURRENT_SCRIPT = process.env.INSTALLSENTRY_SCRIPT_NAME || 'unknown';
+const ATTR_INSTALL_ROOT = 'install-root';
 
 if (!TRACE_FILE) {
   console.error('[installsentry-shim] TRACE_FILE not set, skipping instrumentation');
   process.exit(1);
 }
 
+/** Lockfile / graph id: e.g. node_modules/foo (forward slashes) or install-root for npm at project root */
+function resolveAttributionPackageId() {
+  const root = process.env.INSTALLSENTRY_PROJECT_ROOT;
+  if (!root) {
+    return LEGACY_PACKAGE;
+  }
+  const absRoot = path.resolve(root);
+  const absCwd = path.resolve(process.cwd());
+  let rel = path.relative(absRoot, absCwd);
+  rel = rel.split(path.sep).join('/');
+  if (!rel || rel === '.') {
+    return ATTR_INSTALL_ROOT;
+  }
+  if (rel.startsWith('..')) {
+    return 'unknown';
+  }
+  return rel;
+}
+
 function logEvent(type, details) {
   const event = {
     type,
-    package: CURRENT_PACKAGE,
+    package: resolveAttributionPackageId(),
     script: CURRENT_SCRIPT,
     timestamp: Date.now(),
     details,

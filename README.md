@@ -20,7 +20,7 @@ node dist/cli.js scan ./path-to-your-app
 node dist/cli.js run ./path-to-your-app -o report.html
 ```
 
-**Limitations (read before trusting it for production):** only **`package-lock.json` lockfileVersion 3**; **npm** (not pnpm / Yarn for the lockfile layer yet); **strict** `--ci` (e.g. normal **registry** traffic can fail the gate); trace **package** attribution in the report is still **coarse**; the tool is **observational**, not a full static malware guarantee. For a deliberate exfil test case, see **[`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/)** below.
+**Limitations (read before trusting it for production):** only **`package-lock.json` lockfileVersion 3**; **npm** (not pnpm / Yarn for the lockfile layer yet); **strict** `--ci` (e.g. normal **registry** traffic can fail the gate); per-event **package** is inferred from **`process.cwd()`** under the install root (works for normal lifecycle scripts; not perfect if a script `chdir`s or for exotic workers); the tool is **observational**, not a full static malware guarantee. For a deliberate exfil test case, see **[`tests/fixtures/malware-demo/`](tests/fixtures/malware-demo/)** below.
 
 **Security & responsible use:** The [malware-demo](#malicious-demo-fixture-canary-exfil) fixture is for **local testing and learning** on machines you are allowed to use. Do not point this tool (or the fixture) at systems you do not own, and do not use it to develop or deliver harmful code. InstallSentry is an **educational / research** tool; it is not a substitute for a commercial malware scanner, dependency policy, or formal supply-chain program.
 
@@ -68,7 +68,7 @@ node dist/cli.js run tests/fixtures/malware-demo -o malware-report.html
 node dist/cli.js run tests/fixtures/malware-demo --ci
 ```
 
-The last command exits with a non-zero status: both secret exfil and network are detected. Note: event `package` in the trace is not yet attributed per `node_modules` entry (shim default), so the report sidebar is the most reliable “money” view; graph node highlighting for the malicious package is a follow-up.
+The last command exits with a non-zero status: both secret exfil and network are detected. Traces attribute events to a **lockfile path** (e.g. `node_modules/malice-local`) from **current working directory** under the install root, so the **Blast radius** panel and graph can highlight the responsible package.
 
 ## Architecture
 

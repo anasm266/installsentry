@@ -8,21 +8,41 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import * as cp from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+import * as path from 'node:path';
 import CANARY_SUBSTRINGS from './canary-substrings.json' with { type: 'json' };
 
 const TRACE_FILE = process.env.INSTALLSENTRY_TRACE_FILE;
-const CURRENT_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
+const LEGACY_PACKAGE = process.env.INSTALLSENTRY_PACKAGE_NAME || 'unknown';
 const CURRENT_SCRIPT = process.env.INSTALLSENTRY_SCRIPT_NAME || 'unknown';
+const ATTR_INSTALL_ROOT = 'install-root';
 
 if (!TRACE_FILE) {
   console.error('[installsentry-shim] TRACE_FILE not set, skipping instrumentation');
   process.exit(1);
 }
 
+function resolveAttributionPackageId(): string {
+  const root = process.env.INSTALLSENTRY_PROJECT_ROOT;
+  if (!root) {
+    return LEGACY_PACKAGE;
+  }
+  const absRoot = path.resolve(root);
+  const absCwd = path.resolve(process.cwd());
+  let rel = path.relative(absRoot, absCwd);
+  rel = rel.split(path.sep).join('/');
+  if (!rel || rel === '.') {
+    return ATTR_INSTALL_ROOT;
+  }
+  if (rel.startsWith('..')) {
+    return 'unknown';
+  }
+  return rel;
+}
+
 function logEvent(type: string, details: Record<string, unknown>) {
   const event = {
     type,
-    package: CURRENT_PACKAGE,
+    package: resolveAttributionPackageId(),
     script: CURRENT_SCRIPT,
     timestamp: Date.now(),
     details,
@@ -202,4 +222,6 @@ const origExec = cp.exec;
   return (origExec as any).call(cp, command, options, callback);
 };
 
-console.log(`[installsentry-shim] Instrumentation active for ${CURRENT_PACKAGE}::${CURRENT_SCRIPT}`);
+console.log(
+  `[installsentry-shim] Instrumentation active for ${resolveAttributionPackageId()}::${CURRENT_SCRIPT}`
+);

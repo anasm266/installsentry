@@ -1,5 +1,6 @@
 import type { TraceEvent, AnalysisResult, DependencyGraph, GraphNode } from './types.js';
-import { calculateRiskScore, findPathsToRoot } from './graph.js';
+import { isNonGraphPackageId } from './attribution.js';
+import { calculateRiskScore, findPathsToRoot, resolveGraphNodeId } from './graph.js';
 
 export function analyzeTrace(events: TraceEvent[], graph: DependencyGraph): AnalysisResult {
   const secretHits: AnalysisResult['secretHits'] = [];
@@ -90,20 +91,32 @@ export function analyzeTrace(events: TraceEvent[], graph: DependencyGraph): Anal
 
   const blastRadiusPaths: AnalysisResult['blastRadiusPaths'] = [];
   for (const pkg of suspiciousPackages) {
-    const node = graph.nodes.get(pkg);
-    if (!node) continue;
-    const paths = findPathsToRoot(graph, pkg);
-    const riskScore =
-      calculateRiskScore(node) +
-      (secretHits.some((h) => h.package === pkg) ? 5 : 0) +
-      (networkRequests.some((r) => r.package === pkg) ? 3 : 0);
-
-    for (const path of paths) {
-      blastRadiusPaths.push({
-        target: pkg,
-        path,
-        riskScore,
-      });
+    const graphId = resolveGraphNodeId(graph, pkg);
+    const node = graphId ? graph.nodes.get(graphId) : undefined;
+    if (node && graphId) {
+      const paths = findPathsToRoot(graph, graphId);
+      const riskScore =
+        calculateRiskScore(node) +
+        (secretHits.some((h) => h.package === pkg) ? 5 : 0) +
+        (networkRequests.some((r) => r.package === pkg) ? 3 : 0);
+      for (const path of paths) {
+        blastRadiusPaths.push({
+          target: graphId,
+          path,
+          riskScore,
+        });
+      }
+    } else if (isNonGraphPackageId(pkg)) {
+      const hasSecret = secretHits.some((h) => h.package === pkg);
+      const hasNet = networkRequests.some((r) => r.package === pkg);
+      if (hasSecret || hasNet) {
+        const riskScore = 1 + (hasSecret ? 5 : 0) + (hasNet ? 3 : 0);
+        blastRadiusPaths.push({
+          target: pkg,
+          path: ['(not a specific lockfile package — project install / npm)'],
+          riskScore,
+        });
+      }
     }
   }
 

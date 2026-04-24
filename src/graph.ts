@@ -73,6 +73,16 @@ export function buildGraph(projectPath: string, lockfile: Lockfile): DependencyG
   return { nodes, edges };
 }
 
+/** Map a traced cwd id to a lockfile node id; handles Windows path casing / separators vs lockfile. */
+export function resolveGraphNodeId(graph: DependencyGraph, id: string): string | undefined {
+  if (graph.nodes.has(id)) return id;
+  const lower = id.toLowerCase();
+  for (const k of graph.nodes.keys()) {
+    if (k.toLowerCase() === lower) return k;
+  }
+  return undefined;
+}
+
 export function findPathsToRoot(graph: DependencyGraph, targetId: string): string[][] {
   const paths: string[][] = [];
 

@@ -34,7 +34,8 @@ export interface DependencyGraph {
 
 export interface TraceEvent {
   type: 'fs.read' | 'fs.write' | 'http.request' | 'child_process.spawn' | 'lifecycle.start' | 'lifecycle.end';
-  package?: string; // which package triggered it
+  /** Lockfile path id (e.g. node_modules/pkg), `install-root` (npm at project root), or `unknown` */
+  package?: string;
   script?: string; // which lifecycle script
   timestamp: number;
   details: Record<string, unknown>;
