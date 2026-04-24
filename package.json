@@ -28,7 +28,8 @@
     "test:ci": "npm run build && node scripts/ensure-test-fixture-deps.mjs && vitest run",
     "test:all": "npm run test:ci && npm run lint",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run test:ci"
+    "prepublishOnly": "npm run test:ci",
+    "docs:screenshot": "npm run build && node dist/cli.js run tests/fixtures/malware-demo -o .tmp/malware-report.html && node scripts/capture-readme-screenshot.mjs"
   },
   "keywords": [
     "npm",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.0",
+    "playwright": "^1.49.1",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   },

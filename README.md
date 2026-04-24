@@ -24,6 +24,16 @@ node dist/cli.js run ./path-to-your-app -o report.html
 
 **Security & responsible use:** The [malware-demo](#malicious-demo-fixture-canary-exfil) fixture is for **local testing and learning** on machines you are allowed to use. Do not point this tool (or the fixture) at systems you do not own, and do not use it to develop or deliver harmful code. InstallSentry is an **educational / research** tool; it is not a substitute for a commercial malware scanner, dependency policy, or formal supply-chain program.
 
+### Example: HTML report (malware-demo)
+
+Full-page view of a generated report in the browser. The **Secret Canary** panel shows a fake AWS canary in an outbound request URL; **Network** includes registry traffic and the `example.com` probe; the **right pane** is the Cytoscape dependency graph. The file below is committed in this repository as `docs/images/report-example.png` so it always renders on GitHub.
+
+<p align="center">
+  <img src="docs/images/report-example.png" alt="InstallSentry HTML report: secret canary alert, network egress, and dependency graph (malware-demo fixture)" width="100%" />
+</p>
+
+To regenerate the screenshot locally: `npm run docs:screenshot` (uses the `playwright` devDependency; on Linux/macOS run `npx playwright install chromium` once. On Windows, the script uses the system **Edge** browser.)
+
 ## What it does
 
 Every time you run `npm install`, packages can execute lifecycle scripts (`preinstall`, `install`, `postinstall`) with full access to your environment, filesystem, and network. InstallSentry tells you exactly what happened inside that black box.
