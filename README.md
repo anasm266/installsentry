@@ -4,8 +4,11 @@
 
 [![CI](https://github.com/anasm266/installsentry/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/anasm266/installsentry/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/installsentry.svg)](https://www.npmjs.com/package/installsentry)
+[![npm downloads](https://img.shields.io/npm/dm/installsentry.svg)](https://www.npmjs.com/package/installsentry)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Last-month npm downloads: `226` from `2026-03-27` through `2026-04-25`.
 
 ## Install
 
