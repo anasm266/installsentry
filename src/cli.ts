@@ -14,8 +14,11 @@ import { loadInstallsentryConfig } from './config.js';
 import { parseJsonUtf8 } from './json-utf8.js';
 import { mergeNetworkPolicy, ciShouldFail } from './network-policy.js';
 import { writeSarifToFile } from './sarif.js';
+import { displayPackageIdForReport } from './attribution.js';
+import type { AnalysisResult, DependencyGraph } from './types.js';
 
 const program = new Command();
+program.enablePositionalOptions();
 
 interface RunOptions {
   output: string;
@@ -26,6 +29,21 @@ interface RunOptions {
   runner: string;
   dockerImage: string;
 }
+
+type SummarySeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+interface SummaryFinding {
+  severity: SummarySeverity;
+  package: string;
+  detail: string;
+}
+
+const SEVERITY_ORDER: Record<SummarySeverity, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+};
 
 function resolveProjectPath(projectPath = '.'): string {
   return resolve(projectPath);
@@ -81,6 +99,99 @@ function scanProject(projectPath = '.'): void {
   }
 }
 
+function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${n} ${n === 1 ? singular : pluralForm}`;
+}
+
+function canaryLabel(canary: string): string {
+  const lower = canary.toLowerCase();
+  if (lower.includes('aws_secret')) return 'fake AWS secret canary';
+  if (lower.includes('aws_key')) return 'fake AWS access key canary';
+  if (lower.includes('npm')) return 'fake npm token canary';
+  if (lower.includes('github')) return 'fake GitHub token canary';
+  if (lower.includes('ssh')) return 'fake SSH key canary';
+  return 'fake secret canary';
+}
+
+function buildSummaryFindings(analysis: AnalysisResult): SummaryFinding[] {
+  const findings: SummaryFinding[] = [];
+
+  for (const hit of analysis.secretHits) {
+    const isNetworkExfil = /^https?:\/\//i.test(hit.filePath);
+    let detail = `${isNetworkExfil ? 'sent' : 'read'} ${canaryLabel(hit.canary)}`;
+    if (isNetworkExfil) {
+      try {
+        detail += ` to ${new URL(hit.filePath).host}`;
+      } catch {
+        detail += ' in network request';
+      }
+    } else if (hit.filePath) {
+      detail += ` from ${hit.filePath}`;
+    }
+    findings.push({
+      severity: isNetworkExfil ? 'CRITICAL' : 'HIGH',
+      package: displayPackageIdForReport(hit.package),
+      detail,
+    });
+  }
+
+  for (const request of analysis.networkRequests) {
+    findings.push({
+      severity: 'MEDIUM',
+      package: displayPackageIdForReport(request.package),
+      detail: `made ${request.method} request to ${request.host || request.url}`,
+    });
+  }
+
+  const seen = new Set<string>();
+  return findings
+    .filter((finding) => {
+      const key = `${finding.severity}\0${finding.package}\0${finding.detail}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+function printRunSummary(
+  analysis: AnalysisResult,
+  graph: DependencyGraph,
+  reportPath: string,
+  sarifPath?: string
+): void {
+  const findings = buildSummaryFindings(analysis);
+  const lifecycleCount = Array.from(graph.nodes.values()).filter((n) => n.hasLifecycleScripts).length;
+  const networkHosts = new Set(analysis.networkRequests.map((r) => r.host).filter(Boolean));
+
+  console.log('');
+  if (findings.length > 0) {
+    console.log(`InstallSentry found ${plural(findings.length, 'install-time risk')}`);
+    console.log('');
+    for (const finding of findings.slice(0, 10)) {
+      console.log(
+        `${finding.severity.padEnd(8)}  ${finding.package.padEnd(26)}  ${finding.detail}`
+      );
+    }
+    if (findings.length > 10) {
+      console.log(`... ${plural(findings.length - 10, 'more finding')}`);
+    }
+  } else {
+    console.log('InstallSentry found no install-time risks.');
+  }
+
+  console.log('');
+  console.log('Observed:');
+  console.log(`  ${plural(lifecycleCount, 'package')} with lifecycle scripts`);
+  console.log(`  ${plural(networkHosts.size, 'outbound network host')}`);
+  console.log(`  ${plural(analysis.secretHits.length, 'secret canary hit')}`);
+  console.log('');
+  console.log(`Report: ${reportPath}`);
+  if (sarifPath) {
+    console.log(`SARIF:   ${sarifPath}`);
+  }
+}
+
 async function runProject(projectPath = '.', options: RunOptions): Promise<void> {
   const fullPath = resolveProjectPath(projectPath);
   assertSupportedProject(fullPath);
@@ -117,6 +228,7 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
   const analysis = analyzeTrace(events, graph);
 
   const out = resolve(options.output);
+  const sarifPath = options.sarif ? resolve(options.sarif) : undefined;
   console.log('Generating report...');
   generateReport(
     {
@@ -127,13 +239,12 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
     },
     out
   );
-  console.log(`Report written to ${out}`);
 
-  if (options.sarif) {
-    const sarifPath = resolve(options.sarif);
+  if (sarifPath) {
     writeSarifToFile(sarifPath, analysis, fullPath, { networkPolicy });
-    console.log(`SARIF written to ${sarifPath}`);
   }
+
+  printRunSummary(analysis, graph, out, sarifPath);
 
   cleanupSandbox(sandbox.tempDir);
 

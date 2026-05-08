@@ -49,8 +49,35 @@ describe('cli defaults', () => {
 
         expect(result.code).toBe(0);
         expect(result.stdout).toContain('Parsing lockfile');
-        expect(result.stdout).toContain(`Report written to ${reportPath}`);
+        expect(result.stdout).toContain('InstallSentry found');
+        expect(result.stdout).toContain('CRITICAL');
+        expect(result.stdout).toContain('fake AWS secret canary');
+        expect(result.stdout).toContain(`Report: ${reportPath}`);
         expect(existsSync(reportPath)).toBe(true);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+    120_000
+  );
+
+  it(
+    'respects run subcommand output and SARIF options after the project path',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'installsentry-cli-run-'));
+      const projectPath = join(tempRoot, 'project');
+      const reportPath = join(tempRoot, 'run-report.html');
+      const sarifPath = join(tempRoot, 'run-results.sarif');
+      cpSync(malwareDemoFixture, projectPath, { recursive: true });
+
+      try {
+        const result = await runCli(['run', projectPath, '-o', reportPath, '--sarif', sarifPath], repoRoot);
+
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain(`Report: ${reportPath}`);
+        expect(result.stdout).toContain(`SARIF:   ${sarifPath}`);
+        expect(existsSync(reportPath)).toBe(true);
+        expect(existsSync(sarifPath)).toBe(true);
       } finally {
         rmSync(tempRoot, { recursive: true, force: true });
       }

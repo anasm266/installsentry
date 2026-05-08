@@ -41,6 +41,23 @@ From an npm project with `package.json` and `package-lock.json` v3:
 npx installsentry@latest
 ```
 
+The CLI prints a severity-sorted summary before pointing you to the full report:
+
+```txt
+InstallSentry found 3 install-time risks
+
+CRITICAL  packages/malice-local      sent fake AWS secret canary to example.com
+MEDIUM    Project install (npm)      made POST request to registry.npmjs.org
+MEDIUM    packages/malice-local      made GET request to example.com
+
+Observed:
+  1 package with lifecycle scripts
+  2 outbound network hosts
+  1 secret canary hit
+
+Report: installsentry-report.html
+```
+
 Or, after a global install:
 
 ```bash
