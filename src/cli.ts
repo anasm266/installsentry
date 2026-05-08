@@ -18,6 +18,7 @@ import { writeSarifToFile } from './sarif.js';
 import { displayPackageIdForReport } from './attribution.js';
 import type { AnalysisResult, DependencyGraph } from './types.js';
 import { createDemoProject } from './demo.js';
+import { resolveInstallRunner } from './runner-options.js';
 
 const program = new Command();
 program.enablePositionalOptions();
@@ -28,6 +29,7 @@ interface RunOptions {
   allowHosts?: string;
   denyHosts?: string;
   sarif?: string;
+  docker?: boolean;
   runner: string;
   dockerImage: string;
 }
@@ -203,7 +205,7 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
   };
   const config = loadInstallsentryConfig(fullPath);
   const networkPolicy = mergeNetworkPolicy(config, options.allowHosts, options.denyHosts);
-  const runner: InstallRunner = options.runner === 'docker' ? 'docker' : 'host';
+  const runner: InstallRunner = resolveInstallRunner(options);
   const dockerImage = options.dockerImage?.trim() || undefined;
 
   console.log('Parsing lockfile...');
@@ -285,6 +287,7 @@ function addRunOptions(command: Command, defaultOutput = 'installsentry-report.h
     )
     .option('--deny-hosts <list>', 'CI: hosts that always fail when contacted (in addition to policy rules)')
     .option('--sarif <file>', 'Write SARIF 2.1.0 results to this file (in addition to HTML)')
+    .option('--docker', 'Run the install step inside Docker (alias for --runner docker)')
     .option('--runner <name>', 'host or docker', 'host')
     .option('--docker-image <name>', 'Image when --runner docker (default: node:20-bookworm-slim)', '');
 }

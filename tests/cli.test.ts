@@ -109,6 +109,18 @@ describe('cli defaults', () => {
     120_000
   );
 
+  it(
+    'documents the --docker convenience flag in run help',
+    async () => {
+      const result = await runCli(['run', '--help'], repoRoot);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('--docker');
+      expect(result.stdout).toContain('alias for --runner');
+      expect(result.stdout).toContain('docker)');
+    }
+  );
+
   it('prints a clear error when the current directory is not a supported npm project', async () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'installsentry-cli-invalid-'));
     writeFileSync(join(tempRoot, 'package.json'), '{"name":"invalid-fixture"}\n', 'utf-8');

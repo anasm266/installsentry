@@ -122,7 +122,13 @@ installsentry run ./my-app --ci --allow-hosts "registry.npmjs.org" -o report.htm
 Run the install step inside a container when you want a stronger isolation boundary than the default host temp-directory runner:
 
 ```bash
-installsentry run ./my-app -o report.html --runner docker --docker-image node:20-bookworm-slim
+installsentry run ./my-app --docker -o report.html
+```
+
+`--docker` is a shorthand for `--runner docker`. Use `--docker-image` when you need a specific Node image:
+
+```bash
+installsentry run ./my-app --docker --docker-image node:20-bookworm-slim -o report.html
 ```
 
 On Windows, use Docker Desktop and ensure the temp directory volume is shareable if installs fail.
