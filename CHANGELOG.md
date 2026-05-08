@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - CLI can now run the current working directory by default with `installsentry`.
+- Added `installsentry demo`, which generates a temporary harmless demo project that simulates install-time secret exfiltration and writes `installsentry-demo-report.html`.
 - `installsentry scan` and `installsentry run` now default to the current working directory when no path is provided.
 - Unsupported project errors now clearly list missing required files.
 - `installsentry run` now prints a severity-sorted terminal summary with top risks, observed lifecycle packages, network hosts, secret canary hits, and report paths.

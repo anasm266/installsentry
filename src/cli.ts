@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { resolve } from 'node:path';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { readFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { parseLockfile } from './lockfile.js';
 import { buildGraph } from './graph.js';
 import { runProjectInstall, type InstallRunner } from './install-runner.js';
@@ -16,6 +17,7 @@ import { mergeNetworkPolicy, ciShouldFail } from './network-policy.js';
 import { writeSarifToFile } from './sarif.js';
 import { displayPackageIdForReport } from './attribution.js';
 import type { AnalysisResult, DependencyGraph } from './types.js';
+import { createDemoProject } from './demo.js';
 
 const program = new Command();
 program.enablePositionalOptions();
@@ -260,9 +262,22 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
   }
 }
 
-function addRunOptions(command: Command): Command {
+async function runDemo(options: RunOptions): Promise<void> {
+  const tempDir = mkdtempSync(join(tmpdir(), 'installsentry-demo-'));
+  try {
+    const demoProject = createDemoProject(tempDir);
+    console.log('Running InstallSentry demo project...');
+    console.log('This uses a harmless local package that simulates secret exfiltration.');
+    console.log('');
+    await runProject(demoProject, options);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+function addRunOptions(command: Command, defaultOutput = 'installsentry-report.html'): Command {
   return command
-    .option('-o, --output <file>', 'Output HTML report path', 'installsentry-report.html')
+    .option('-o, --output <file>', 'Output HTML report path', defaultOutput)
     .option('--ci', 'Exit with non-zero if policy violation (secrets, or disallowed network)')
     .option(
       '--allow-hosts <list>',
@@ -296,6 +311,20 @@ program
   .action((projectPath: string) => {
     try {
       scanProject(projectPath);
+    } catch (err) {
+      handleCliError(err);
+    }
+  });
+
+addRunOptions(
+  program
+    .command('demo')
+    .description('Run a harmless generated demo that simulates install-time secret exfiltration'),
+  'installsentry-demo-report.html'
+)
+  .action(async (options: RunOptions) => {
+    try {
+      await runDemo(options);
     } catch (err) {
       handleCliError(err);
     }

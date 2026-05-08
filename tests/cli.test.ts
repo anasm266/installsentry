@@ -28,6 +28,30 @@ function runCli(args: string[], cwd: string): Promise<CliResult> {
 }
 
 describe('cli defaults', () => {
+  it(
+    'runs a generated demo without modifying the current project',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'installsentry-cli-demo-'));
+      const reportPath = join(tempRoot, 'demo-report.html');
+
+      try {
+        const result = await runCli(['demo', '-o', reportPath], tempRoot);
+
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain('Running InstallSentry demo project');
+        expect(result.stdout).toContain('CRITICAL');
+        expect(result.stdout).toContain('fake AWS secret canary');
+        expect(result.stdout).toContain(`Report: ${reportPath}`);
+        expect(existsSync(reportPath)).toBe(true);
+        expect(existsSync(join(tempRoot, 'package.json'))).toBe(false);
+        expect(existsSync(join(tempRoot, 'packages'))).toBe(false);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+    120_000
+  );
+
   it('scan defaults to the current working directory', async () => {
     const result = await runCli(['scan'], malwareDemoFixture);
 

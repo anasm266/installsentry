@@ -34,6 +34,12 @@ or install locally: `npm i installsentry` then `npx.cmd installsentry` or `node 
 
 ## Quick start
 
+Try the built-in demo first. It creates a temporary npm project with a harmless local package that simulates install-time secret exfiltration, then writes `installsentry-demo-report.html` in your current directory.
+
+```bash
+npx installsentry@latest demo
+```
+
 From an npm project with `package.json` and `package-lock.json` v3:
 
 ```bash
