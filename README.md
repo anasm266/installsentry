@@ -34,11 +34,26 @@ or install locally: `npm i installsentry` then `npx.cmd installsentry` or `node 
 
 ## Quick start
 
-```bash
-# List packages (from the lockfile) that declare install-time scripts
-installsentry scan /path/to/your-app
+From an npm project with `package.json` and `package-lock.json` v3:
 
-# Run a sandboxed copy of `npm install`, trace behavior, write a report
+```bash
+# Run a sandboxed copy of `npm install`, trace behavior, write installsentry-report.html
+npx installsentry@latest
+```
+
+Or, after a global install:
+
+```bash
+installsentry
+```
+
+You can still pass an explicit project path:
+
+```bash
+# List packages from the current lockfile that declare install-time scripts
+installsentry scan
+
+# Analyze another project and choose the report path
 installsentry run /path/to/your-app -o report.html
 ```
 

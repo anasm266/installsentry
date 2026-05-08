@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- CLI can now run the current working directory by default with `installsentry`.
+- `installsentry scan` and `installsentry run` now default to the current working directory when no path is provided.
+- Unsupported project errors now clearly list missing required files.
+
 ## [0.1.1] - 2026-04-24
 
 ### Fixed
