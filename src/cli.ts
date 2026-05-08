@@ -19,6 +19,7 @@ import { displayPackageIdForReport } from './attribution.js';
 import type { AnalysisResult, DependencyGraph } from './types.js';
 import { createDemoProject } from './demo.js';
 import { resolveInstallRunner } from './runner-options.js';
+import { parseNpmCommand, type NpmCommand } from './npm-command.js';
 
 const program = new Command();
 program.enablePositionalOptions();
@@ -32,6 +33,7 @@ interface RunOptions {
   docker?: boolean;
   runner: string;
   dockerImage: string;
+  npmCommand?: string;
 }
 
 type SummarySeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -196,7 +198,11 @@ function printRunSummary(
   }
 }
 
-async function runProject(projectPath = '.', options: RunOptions): Promise<void> {
+async function runProject(
+  projectPath = '.',
+  options: RunOptions,
+  defaults: { npmCommand: NpmCommand; ci?: boolean } = { npmCommand: 'install' }
+): Promise<void> {
   const fullPath = resolveProjectPath(projectPath);
   assertSupportedProject(fullPath);
   const rootPkg = parseJsonUtf8(readFileSync(resolve(fullPath, 'package.json'), 'utf-8')) as {
@@ -206,20 +212,24 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
   const config = loadInstallsentryConfig(fullPath);
   const networkPolicy = mergeNetworkPolicy(config, options.allowHosts, options.denyHosts);
   const runner: InstallRunner = resolveInstallRunner(options);
+  const npmCommand = parseNpmCommand(options.npmCommand, defaults.npmCommand);
   const dockerImage = options.dockerImage?.trim() || undefined;
+  const ciMode = options.ci || defaults.ci === true;
 
   console.log('Parsing lockfile...');
   const lockfile = parseLockfile(fullPath);
   const graph = buildGraph(fullPath, lockfile);
 
   const runnerLabel = runner === 'docker' ? 'Docker' : 'host';
-  console.log(`Running ${runnerLabel} sandboxed npm install...`);
+  console.log(`Running ${runnerLabel} sandboxed npm ${npmCommand}...`);
   const sandbox = await runProjectInstall({
     projectPath: fullPath,
     runner,
     dockerImage,
+    npmCommand,
+    scriptName: npmCommand,
   });
-  console.log(`npm install exited with code ${sandbox.exitCode}`);
+  console.log(`npm ${npmCommand} exited with code ${sandbox.exitCode}`);
   if (sandbox.exitCode !== 0) {
     console.error('STDERR:', sandbox.stderr.slice(0, 2000));
   }
@@ -252,7 +262,7 @@ async function runProject(projectPath = '.', options: RunOptions): Promise<void>
 
   cleanupSandbox(sandbox.tempDir);
 
-  if (options.ci) {
+  if (ciMode) {
     const failed = ciShouldFail(analysis, networkPolicy);
     if (failed) {
       console.error(
@@ -277,7 +287,11 @@ async function runDemo(options: RunOptions): Promise<void> {
   }
 }
 
-function addRunOptions(command: Command, defaultOutput = 'installsentry-report.html'): Command {
+function addRunOptions(
+  command: Command,
+  defaultOutput = 'installsentry-report.html',
+  defaultNpmCommand: NpmCommand = 'install'
+): Command {
   return command
     .option('-o, --output <file>', 'Output HTML report path', defaultOutput)
     .option('--ci', 'Exit with non-zero if policy violation (secrets, or disallowed network)')
@@ -289,6 +303,7 @@ function addRunOptions(command: Command, defaultOutput = 'installsentry-report.h
     .option('--sarif <file>', 'Write SARIF 2.1.0 results to this file (in addition to HTML)')
     .option('--docker', 'Run the install step inside Docker (alias for --runner docker)')
     .option('--runner <name>', 'host or docker', 'host')
+    .option('--npm-command <name>', 'npm command to replay: install or ci', defaultNpmCommand)
     .option('--docker-image <name>', 'Image when --runner docker (default: node:20-bookworm-slim)', '');
 }
 
@@ -314,6 +329,22 @@ program
   .action((projectPath: string) => {
     try {
       scanProject(projectPath);
+    } catch (err) {
+      handleCliError(err);
+    }
+  });
+
+addRunOptions(
+  program
+    .command('ci')
+    .description('Run CI-oriented analysis with npm ci and policy gating')
+    .argument('[path]', 'Path to project directory', '.'),
+  'installsentry-report.html',
+  'ci'
+)
+  .action(async (projectPath: string, options: RunOptions) => {
+    try {
+      await runProject(projectPath, options, { npmCommand: 'ci', ci: true });
     } catch (err) {
       handleCliError(err);
     }

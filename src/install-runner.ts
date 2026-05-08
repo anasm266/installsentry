@@ -12,6 +12,7 @@ export async function runProjectInstall(
       projectPath: options.projectPath,
       packageName: options.packageName,
       scriptName: options.scriptName,
+      npmCommand: options.npmCommand,
       dockerImage: options.dockerImage,
     });
   }

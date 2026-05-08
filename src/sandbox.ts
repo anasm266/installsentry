@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, cpSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { npmInstallArgs, type NpmCommand } from './npm-command.js';
 
 export interface SandboxResult {
   tempDir: string;
@@ -16,6 +17,7 @@ export interface SandboxOptions {
   projectPath: string;
   packageName?: string;
   scriptName?: string;
+  npmCommand?: NpmCommand;
 }
 
 const SECRET_CANARIES: Record<string, string> = {
@@ -105,10 +107,11 @@ export function buildInstallEnv(
 function waitForNpm(
   tempDir: string,
   env: Record<string, string>,
-  traceFile: string
+  traceFile: string,
+  npmCommand: NpmCommand
 ): Promise<SandboxResult> {
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn('npm', ['install', '--ignore-scripts=false'], {
+    const proc = spawn('npm', npmInstallArgs(npmCommand), {
       cwd: tempDir,
       env,
       shell: true,
@@ -141,6 +144,7 @@ function waitForNpm(
  */
 export async function runSandboxedInstall(options: SandboxOptions): Promise<SandboxResult> {
   const { tempDir, traceFile, shimPath } = prepareInstallWorkspace(options.projectPath);
+  const npmCommand = options.npmCommand || 'install';
   const env = buildInstallEnv({
     projectRoot: tempDir,
     traceFile,
@@ -149,7 +153,7 @@ export async function runSandboxedInstall(options: SandboxOptions): Promise<Sand
     scriptName: options.scriptName || 'install',
     includeProcessEnv: true,
   });
-  return waitForNpm(tempDir, env, traceFile);
+  return waitForNpm(tempDir, env, traceFile, npmCommand);
 }
 
 export function cleanupSandbox(tempDir: string) {

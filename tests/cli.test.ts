@@ -110,6 +110,52 @@ describe('cli defaults', () => {
   );
 
   it(
+    'supports npm ci through --npm-command',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'installsentry-cli-npm-ci-'));
+      const projectPath = join(tempRoot, 'project');
+      const reportPath = join(tempRoot, 'npm-ci-report.html');
+      cpSync(malwareDemoFixture, projectPath, { recursive: true });
+
+      try {
+        const result = await runCli(['run', projectPath, '--npm-command', 'ci', '-o', reportPath], repoRoot);
+
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain('Running host sandboxed npm ci');
+        expect(result.stdout).toContain('npm ci exited with code 0');
+        expect(result.stdout).toContain(`Report: ${reportPath}`);
+        expect(existsSync(reportPath)).toBe(true);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+    120_000
+  );
+
+  it(
+    'ci command defaults to npm ci and enables policy gating',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'installsentry-cli-ci-command-'));
+      const projectPath = join(tempRoot, 'project');
+      const reportPath = join(tempRoot, 'ci-report.html');
+      cpSync(malwareDemoFixture, projectPath, { recursive: true });
+
+      try {
+        const result = await runCli(['ci', projectPath, '-o', reportPath, '--allow-hosts', 'registry.npmjs.org'], repoRoot);
+
+        expect(result.code).toBe(1);
+        expect(result.stdout).toContain('Running host sandboxed npm ci');
+        expect(result.stdout).toContain(`Report: ${reportPath}`);
+        expect(result.stderr).toContain('CI gate FAILED');
+        expect(existsSync(reportPath)).toBe(true);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+    120_000
+  );
+
+  it(
     'documents the --docker convenience flag in run help',
     async () => {
       const result = await runCli(['run', '--help'], repoRoot);

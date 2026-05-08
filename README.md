@@ -93,6 +93,12 @@ installsentry scan
 
 # Analyze another project and choose the report path
 installsentry run /path/to/your-app -o report.html
+
+# Use npm ci instead of npm install
+installsentry run . --npm-command ci
+
+# CI-oriented mode: uses npm ci and exits non-zero on policy violations
+installsentry ci
 ```
 
 Open the generated HTML report in a browser. The report includes secret-canary hits, network egress, blast-radius paths, and an interactive dependency graph. Large projects default to a focused view; use the graph menu to switch modes.
@@ -104,7 +110,8 @@ Open the generated HTML report in a browser. The report includes secret-canary h
 - Injects a small Node shim with `NODE_OPTIONS` so filesystem reads, filesystem writes, HTTP(S) traffic, and subprocess spawns from that install are logged.
 - Sets fake canary values in common secret environment variables so reads or exfiltration attempts can be detected without exposing real secrets.
 - Writes a self-contained HTML report and can emit SARIF 2.1.0 for tools like GitHub code scanning.
-- In CI mode, exits non-zero when secret canary rules or your network policy are violated.
+- `installsentry run` replays `npm install` by default. Use `--npm-command ci` to replay `npm ci` instead.
+- `installsentry ci` replays `npm ci` and exits non-zero when secret canary rules or your network policy are violated.
 
 ## CI, network policy, and SARIF
 
@@ -113,8 +120,10 @@ Open the generated HTML report in a browser. The report includes secret-canary h
 - `--deny-hosts` lists hosts that always fail, even if allowlisted.
 - `--sarif <file>` writes SARIF alongside the HTML report.
 
+Local command:
+
 ```bash
-installsentry run ./my-app --ci --allow-hosts "registry.npmjs.org" -o report.html --sarif results.sarif
+installsentry ci ./my-app --allow-hosts "registry.npmjs.org" -o report.html --sarif results.sarif
 ```
 
 ## Docker
@@ -141,7 +150,11 @@ Use the published CLI with `npx`:
 - uses: actions/setup-node@v4
   with:
     node-version: 20
-- run: npx --yes installsentry@0.1.1 run ./my-app -o report.html
+- run: npx --yes installsentry@latest ci ./my-app --allow-hosts registry.npmjs.org --sarif installsentry.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: installsentry.sarif
 ```
 
 For PowerShell-based Windows jobs, use `npx.cmd`.

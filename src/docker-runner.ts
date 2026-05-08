@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prepareInstallWorkspace, buildInstallEnv, type SandboxResult, type SandboxOptions } from './sandbox.js';
+import { npmInstallArgs } from './npm-command.js';
 
 const DEFAULT_IMAGE = 'node:20-bookworm-slim';
 
@@ -30,6 +31,7 @@ export async function runDockerInstall(options: DockerRunOptions): Promise<Sandb
   writeFileSync(envFile, lines.join('\n'), { encoding: 'utf-8' });
 
   const image = options.dockerImage || DEFAULT_IMAGE;
+  const npmCommand = options.npmCommand || 'install';
   const args: string[] = [
     'run',
     '--rm',
@@ -41,8 +43,7 @@ export async function runDockerInstall(options: DockerRunOptions): Promise<Sandb
     '/project',
     image,
     'npm',
-    'install',
-    '--ignore-scripts=false',
+    ...npmInstallArgs(npmCommand),
   ];
 
   return new Promise((resolvePromise, reject) => {
