@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 - `installsentry scan` and `installsentry run` now default to the current working directory when no path is provided.
 - Unsupported project errors now clearly list missing required files.
 - `installsentry run` now prints a severity-sorted terminal summary with top risks, observed lifecycle packages, network hosts, secret canary hits, and report paths.
+- Reworked the README and npm package description around a simpler demo-first message: see what npm packages do during install.
 
 ## [0.1.1] - 2026-04-24
 
