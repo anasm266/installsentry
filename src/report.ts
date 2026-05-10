@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { displayPackageIdForReport } from './attribution.js';
+import { buildFindings, countFindingsBySeverity, type Finding, type FindingSeverity } from './findings.js';
 import { computeBlastFocusNodeIds, computeResolvedHighlightIds } from './report-graph.js';
 import type { ReportData } from './types.js';
 
@@ -27,6 +28,8 @@ export function generateReport(data: ReportData, outputPath: string) {
 
 function buildHtml(data: ReportData): string {
   const { graph, analysis, targetPackage, targetVersion } = data;
+  const findings = buildFindings(analysis);
+  const findingCounts = countFindingsBySeverity(findings);
 
   const baseNodes = Array.from(graph.nodes.values()).map((n) => ({
     id: n.id,
@@ -70,6 +73,7 @@ function buildHtml(data: ReportData): string {
     .badges { display:flex; flex-wrap:wrap; gap:0.5rem; }
     .badge { padding:.35rem .6rem; border-radius:999px; font-size:.75rem; font-weight:600; background:#21262d; border:1px solid #30363d; }
     .badge.danger { background:rgba(248,81,73,.15); color:var(--danger); border-color:rgba(248,81,73,.3); }
+    .badge.warn { background:rgba(210,153,34,.12); color:var(--warn); border-color:rgba(210,153,34,.3); }
     .layout { display:grid; grid-template-columns: minmax(0, 320px) 1fr; height:calc(100vh - 120px); }
     .sidebar { border-right:1px solid #30363d; overflow:auto; padding:1rem; min-width:0; }
     .section { margin-bottom:1.5rem; min-width:0; }
@@ -77,6 +81,15 @@ function buildHtml(data: ReportData): string {
     .alert { padding:.75rem; border-radius:6px; background:rgba(248,81,73,.1); border:1px solid rgba(248,81,73,.25); margin-bottom:.5rem; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
     .alert-title { font-weight:600; color:var(--danger); font-size:.85rem; word-break:break-word; }
     .alert-meta { font-size:.8rem; color:#8b949e; margin-top:.25rem; overflow-wrap:anywhere; word-break:break-word; hyphens:manual; }
+    .finding { padding:.7rem; border-radius:6px; background:#161b22; border:1px solid #30363d; margin-bottom:.45rem; min-width:0; }
+    .finding-row { display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.35rem; }
+    .finding-severity { border-radius:999px; padding:.16rem .45rem; font-size:.68rem; font-weight:700; letter-spacing:.02em; border:1px solid #30363d; flex-shrink:0; }
+    .finding-severity.critical { color:var(--danger); background:rgba(248,81,73,.14); border-color:rgba(248,81,73,.35); }
+    .finding-severity.high { color:#ff9b93; background:rgba(248,81,73,.08); border-color:rgba(248,81,73,.22); }
+    .finding-severity.medium { color:var(--warn); background:rgba(210,153,34,.12); border-color:rgba(210,153,34,.3); }
+    .finding-severity.low { color:#8b949e; background:#21262d; }
+    .finding-package { font-size:.78rem; color:#8b949e; min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+    .finding-detail { font-size:.86rem; line-height:1.35; overflow-wrap:anywhere; word-break:break-word; }
     .timeline-item { display:flex; gap:.75rem; padding:.6rem; border-radius:6px; background:#161b22; margin-bottom:.4rem; min-width:0; }
     .timeline-time { font-variant-numeric:tabular-nums; color:#8b949e; font-size:.8rem; flex-shrink:0; }
     .timeline-body { font-size:.85rem; min-width:0; flex:1; overflow-wrap:anywhere; word-break:break-word; }
@@ -105,6 +118,9 @@ function buildHtml(data: ReportData): string {
     </div>
     <div class="badges">
       <span class="badge">${escapeHtml(targetPackage)}@${escapeHtml(targetVersion)}</span>
+      <span class="badge danger">${findingCounts.CRITICAL} critical</span>
+      <span class="badge danger">${findingCounts.HIGH} high</span>
+      <span class="badge warn">${findingCounts.MEDIUM} medium</span>
       <span class="badge danger">${analysis.secretHits.length} secret hits</span>
       <span class="badge">${analysis.networkRequests.length} network requests</span>
     </div>
@@ -112,6 +128,10 @@ function buildHtml(data: ReportData): string {
   </header>
   <div class="layout">
     <aside class="sidebar">
+      <div class="section">
+        <h3>Findings</h3>
+        ${renderFindings(findings)}
+      </div>
       <div class="section">
         <h3>Secret Canary Alerts</h3>
         ${
@@ -394,6 +414,30 @@ function buildHtml(data: ReportData): string {
   </script>
 </body>
 </html>`;
+}
+
+function severityClass(severity: FindingSeverity): string {
+  return severity.toLowerCase();
+}
+
+function renderFindings(findings: Finding[]): string {
+  if (findings.length === 0) {
+    return '<p style="color:#8b949e;font-size:.85rem;">No install-time risks found.</p>';
+  }
+
+  return findings
+    .map(
+      (finding) => `
+          <div class="finding">
+            <div class="finding-row">
+              <span class="finding-severity ${severityClass(finding.severity)}">${escapeHtml(finding.severity)}</span>
+              <span class="finding-package">${escapeHtml(finding.package)}</span>
+            </div>
+            <div class="finding-detail">${escapeHtml(finding.detail)}</div>
+          </div>
+        `
+    )
+    .join('');
 }
 
 function escapeHtml(text: string) {
