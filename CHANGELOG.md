@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 - Reworked the README and npm package description around a simpler demo-first message: see what npm packages do during install.
 - Added `--docker` as a convenience alias for `--runner docker`.
 - Added constrained npm command selection with `--npm-command install|ci` and a CI-oriented `installsentry ci` command that defaults to `npm ci` with policy gating enabled.
+- CI failures now print specific secret canary findings, network policy violations, allowed hosts, and suggested fixes.
 
 ## [0.1.1] - 2026-04-24
 

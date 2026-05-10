@@ -126,6 +126,25 @@ Local command:
 installsentry ci ./my-app --allow-hosts "registry.npmjs.org" -o report.html --sarif results.sarif
 ```
 
+When CI fails, InstallSentry prints the specific reason instead of only a generic exit message:
+
+```txt
+CI gate FAILED
+
+Critical findings:
+  packages/malice-local sent fake AWS secret canary to example.com
+
+Network policy violations:
+  example.com was contacted by packages/malice-local
+
+Allowed network:
+  registry.npmjs.org
+
+Fix:
+  - Investigate packages that touched fake secret canaries.
+  - If a network host is expected, allow it with --allow-hosts <host1,host2>.
+```
+
 ## Docker
 
 Run the install step inside a container when you want a stronger isolation boundary than the default host temp-directory runner:
