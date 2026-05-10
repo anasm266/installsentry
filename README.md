@@ -101,7 +101,7 @@ installsentry run . --npm-command ci
 installsentry ci
 ```
 
-Open the generated HTML report in a browser. The report includes secret-canary hits, network egress, blast-radius paths, and an interactive dependency graph. Large projects default to a focused view; use the graph menu to switch modes.
+Open the generated HTML report in a browser. The report starts with severity counts and a Findings section that mirrors the CLI summary, then includes secret-canary hits, network egress, blast-radius paths, and an interactive dependency graph. Large projects default to a focused view; use the graph menu to switch modes.
 
 ## How it works
 
@@ -109,7 +109,7 @@ Open the generated HTML report in a browser. The report includes secret-canary h
 - Runs a fresh `npm install` in a temporary copy of your project on the host, or optionally inside Docker.
 - Injects a small Node shim with `NODE_OPTIONS` so filesystem reads, filesystem writes, HTTP(S) traffic, and subprocess spawns from that install are logged.
 - Sets fake canary values in common secret environment variables so reads or exfiltration attempts can be detected without exposing real secrets.
-- Writes a self-contained HTML report and can emit SARIF 2.1.0 for tools like GitHub code scanning.
+- Writes a self-contained HTML report with severity-sorted findings and can emit SARIF 2.1.0 for tools like GitHub code scanning.
 - `installsentry run` replays `npm install` by default. Use `--npm-command ci` to replay `npm ci` instead.
 - `installsentry ci` replays `npm ci` and exits non-zero when secret canary rules or your network policy are violated.
 
@@ -183,7 +183,7 @@ To run the composite action in this repository, see [`.github/actions/installsen
 ## Example report
 
 <p align="center">
-  <img src="docs/images/report-example.png" alt="InstallSentry HTML report: alerts, network list, and dependency graph" width="100%" />
+  <img src="docs/images/report-example.png" alt="InstallSentry HTML report: findings, alerts, network list, and dependency graph" width="100%" />
 </p>
 
 Reference run on the canary demo scenario included in the GitHub repository.
