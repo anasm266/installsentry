@@ -25,6 +25,7 @@ import type { AnalysisResult, DependencyGraph } from './types.js';
 import { createDemoProject } from './demo.js';
 import { resolveInstallRunner } from './runner-options.js';
 import { parseNpmCommand, type NpmCommand } from './npm-command.js';
+import { buildFindings } from './findings.js';
 
 const program = new Command();
 program.enablePositionalOptions();
@@ -40,21 +41,6 @@ interface RunOptions {
   dockerImage: string;
   npmCommand?: string;
 }
-
-type SummarySeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-
-interface SummaryFinding {
-  severity: SummarySeverity;
-  package: string;
-  detail: string;
-}
-
-const SEVERITY_ORDER: Record<SummarySeverity, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-};
 
 function resolveProjectPath(projectPath = '.'): string {
   return resolve(projectPath);
@@ -114,64 +100,13 @@ function plural(n: number, singular: string, pluralForm = `${singular}s`): strin
   return `${n} ${n === 1 ? singular : pluralForm}`;
 }
 
-function canaryLabel(canary: string): string {
-  const lower = canary.toLowerCase();
-  if (lower.includes('aws_secret')) return 'fake AWS secret canary';
-  if (lower.includes('aws_key')) return 'fake AWS access key canary';
-  if (lower.includes('npm')) return 'fake npm token canary';
-  if (lower.includes('github')) return 'fake GitHub token canary';
-  if (lower.includes('ssh')) return 'fake SSH key canary';
-  return 'fake secret canary';
-}
-
-function buildSummaryFindings(analysis: AnalysisResult): SummaryFinding[] {
-  const findings: SummaryFinding[] = [];
-
-  for (const hit of analysis.secretHits) {
-    const isNetworkExfil = /^https?:\/\//i.test(hit.filePath);
-    let detail = `${isNetworkExfil ? 'sent' : 'read'} ${canaryLabel(hit.canary)}`;
-    if (isNetworkExfil) {
-      try {
-        detail += ` to ${new URL(hit.filePath).host}`;
-      } catch {
-        detail += ' in network request';
-      }
-    } else if (hit.filePath) {
-      detail += ` from ${hit.filePath}`;
-    }
-    findings.push({
-      severity: isNetworkExfil ? 'CRITICAL' : 'HIGH',
-      package: displayPackageIdForReport(hit.package),
-      detail,
-    });
-  }
-
-  for (const request of analysis.networkRequests) {
-    findings.push({
-      severity: 'MEDIUM',
-      package: displayPackageIdForReport(request.package),
-      detail: `made ${request.method} request to ${request.host || request.url}`,
-    });
-  }
-
-  const seen = new Set<string>();
-  return findings
-    .filter((finding) => {
-      const key = `${finding.severity}\0${finding.package}\0${finding.detail}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
-}
-
 function printRunSummary(
   analysis: AnalysisResult,
   graph: DependencyGraph,
   reportPath: string,
   sarifPath?: string
 ): void {
-  const findings = buildSummaryFindings(analysis);
+  const findings = buildFindings(analysis);
   const lifecycleCount = Array.from(graph.nodes.values()).filter((n) => n.hasLifecycleScripts).length;
   const networkHosts = new Set(analysis.networkRequests.map((r) => r.host).filter(Boolean));
 
@@ -208,7 +143,7 @@ function uniqueLines(lines: string[]): string[] {
 }
 
 function printCiFailure(analysis: AnalysisResult, networkPolicy: ResolvedNetworkPolicy): void {
-  const secretFindings = buildSummaryFindings(analysis).filter(
+  const secretFindings = buildFindings(analysis).filter(
     (finding) => finding.severity === 'CRITICAL' || finding.severity === 'HIGH'
   );
   const networkViolations = getNetworkFindingsForCi(analysis.networkRequests, networkPolicy);
