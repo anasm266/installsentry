@@ -147,6 +147,14 @@ describe('cli defaults', () => {
         expect(result.stdout).toContain('Running host sandboxed npm ci');
         expect(result.stdout).toContain(`Report: ${reportPath}`);
         expect(result.stderr).toContain('CI gate FAILED');
+        expect(result.stderr).toContain('Critical findings:');
+        expect(result.stderr).toContain('packages/malice-local sent fake AWS secret canary to example.com');
+        expect(result.stderr).toContain('Network policy violations:');
+        expect(result.stderr).toContain('example.com was contacted by packages/malice-local');
+        expect(result.stderr).toContain('Allowed network:');
+        expect(result.stderr).toContain('registry.npmjs.org');
+        expect(result.stderr).not.toContain('registry.npmjs.org was contacted');
+        expect(result.stderr).toContain('Fix:');
         expect(existsSync(reportPath)).toBe(true);
       } finally {
         rmSync(tempRoot, { recursive: true, force: true });

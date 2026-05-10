@@ -13,7 +13,12 @@ import { analyzeTrace } from './analyzer.js';
 import { generateReport } from './report.js';
 import { loadInstallsentryConfig } from './config.js';
 import { parseJsonUtf8 } from './json-utf8.js';
-import { mergeNetworkPolicy, ciShouldFail } from './network-policy.js';
+import {
+  mergeNetworkPolicy,
+  ciShouldFail,
+  getNetworkFindingsForCi,
+  type ResolvedNetworkPolicy,
+} from './network-policy.js';
 import { writeSarifToFile } from './sarif.js';
 import { displayPackageIdForReport } from './attribution.js';
 import type { AnalysisResult, DependencyGraph } from './types.js';
@@ -198,6 +203,61 @@ function printRunSummary(
   }
 }
 
+function uniqueLines(lines: string[]): string[] {
+  return Array.from(new Set(lines));
+}
+
+function printCiFailure(analysis: AnalysisResult, networkPolicy: ResolvedNetworkPolicy): void {
+  const secretFindings = buildSummaryFindings(analysis).filter(
+    (finding) => finding.severity === 'CRITICAL' || finding.severity === 'HIGH'
+  );
+  const networkViolations = getNetworkFindingsForCi(analysis.networkRequests, networkPolicy);
+  const allowedHosts = Array.from(networkPolicy.allow.values()).sort();
+
+  console.error('');
+  console.error('CI gate FAILED');
+
+  if (secretFindings.length > 0) {
+    console.error('');
+    console.error('Critical findings:');
+    for (const line of uniqueLines(secretFindings.map((finding) => `  ${finding.package} ${finding.detail}`))) {
+      console.error(line);
+    }
+  }
+
+  if (networkViolations.length > 0) {
+    console.error('');
+    console.error('Network policy violations:');
+    for (const line of uniqueLines(
+      networkViolations.map(
+        (request) =>
+          `  ${request.host || request.url} was contacted by ${displayPackageIdForReport(request.package)}`
+      )
+    )) {
+      console.error(line);
+    }
+  }
+
+  if (allowedHosts.length > 0) {
+    console.error('');
+    console.error('Allowed network:');
+    for (const host of allowedHosts) {
+      console.error(`  ${host}`);
+    }
+  }
+
+  console.error('');
+  console.error('Fix:');
+  if (secretFindings.length > 0) {
+    console.error('  - Investigate packages that touched fake secret canaries.');
+  }
+  if (networkViolations.length > 0) {
+    console.error(
+      '  - If a network host is expected, allow it with --allow-hosts <host1,host2>.'
+    );
+  }
+}
+
 async function runProject(
   projectPath = '.',
   options: RunOptions,
@@ -265,9 +325,7 @@ async function runProject(
   if (ciMode) {
     const failed = ciShouldFail(analysis, networkPolicy);
     if (failed) {
-      console.error(
-        'CI gate FAILED: policy violation (secret canaries, or disallowed network under current policy).'
-      );
+      printCiFailure(analysis, networkPolicy);
       process.exit(1);
     }
     console.log('CI gate passed.');
