@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.2.0] - 2026-05-26
+
 ### Added
 
 - CLI can now run the current working directory by default with `installsentry`.
@@ -16,6 +18,8 @@ All notable changes to this project are documented in this file.
 - Added constrained npm command selection with `--npm-command install|ci` and a CI-oriented `installsentry ci` command that defaults to `npm ci` with policy gating enabled.
 - CI failures now print specific secret canary findings, network policy violations, allowed hosts, and suggested fixes.
 - HTML reports now include severity counts and a top-level Findings section that mirrors the CLI risk summary.
+
+[0.2.0]: https://github.com/anasm266/installsentry/releases/tag/v0.2.0
 
 ## [0.1.1] - 2026-04-24
 

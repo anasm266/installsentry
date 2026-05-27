@@ -303,7 +303,7 @@ function addRunOptions(
 program
   .name('installsentry')
   .description('Supply-chain blast-radius visualizer for npm installs')
-  .version('0.1.1')
+  .version('0.2.0')
   .argument('[path]', 'Path to project directory', '.')
   .action(async (projectPath: string) => {
     try {
