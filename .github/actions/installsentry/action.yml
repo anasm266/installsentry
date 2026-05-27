@@ -1,71 +1,104 @@
-name: 'InstallSentry run'
-description: 'Run a sandboxed npm install with InstallSentry. Requires a prior job step that runs npm ci and npm run build in this repository (so dist/ exists), or npx from npm after publish.'
+name: 'InstallSentry'
+description: 'Run InstallSentry install-time analysis with optional SARIF and policy modes.'
 author: 'anas'
 
 inputs:
   project-path:
     required: true
-    description: 'Path to a project with package-lock.json v3 (relative to the workspace root).'
+    description: 'Path to project with a supported lockfile.'
+  command:
+    required: false
+    default: 'ci'
+    description: 'CLI subcommand: run, ci, or scan'
   output:
     required: false
     default: 'installsentry-report.html'
-    description: 'HTML report path (relative to the workspace root unless absolute).'
-  ci:
+    description: 'HTML report path (workspace-relative unless absolute).'
+  format:
     required: false
-    default: 'false'
-    description: "If 'true', fail the step on CI policy violations (secrets, or disallowed network)."
+    default: 'html'
+    description: 'Report format: html, json, or both'
+  policy:
+    required: false
+    default: 'strict'
+    description: 'CI policy: balanced, strict, or custom'
   allow-hosts:
     required: false
-    default: ''
-    description: 'Comma-separated host allowlist (CLI --allow-hosts).'
+    default: 'registry.npmjs.org'
+    description: 'Comma-separated network allowlist.'
   deny-hosts:
     required: false
     default: ''
-    description: 'Comma-separated host deny list (CLI --deny-hosts).'
+    description: 'Comma-separated network denylist.'
   sarif-output:
     required: false
     default: ''
-    description: 'Optional path for SARIF 2.1.0 (relative to workspace), for upload-sarif or actions/upload-artifact.'
+    description: 'Optional SARIF output path.'
+  package-manager:
+    required: false
+    default: ''
+    description: 'npm, pnpm, or yarn (auto-detect if empty).'
   runner:
     required: false
     default: 'host'
-    description: "host or docker"
+    description: 'host or docker'
+  docker:
+    required: false
+    default: 'false'
+    description: "Set to 'true' for Docker runner"
+  docker-network:
+    required: false
+    default: 'default'
+    description: 'default or none'
   docker-image:
     required: false
     default: 'node:20-bookworm-slim'
-    description: "Used when runner is docker (CLI --docker-image)."
+  installsentry-version:
+    required: false
+    default: '2'
+    description: 'npm dist-tag or version for npx installsentry'
 
 outputs:
   report:
-    description: 'HTML report path (input output).'
+    description: 'HTML report path'
     value: ${{ inputs.output }}
 
 runs:
   using: composite
   steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
     - name: Run InstallSentry
       shell: bash
       env:
         PROJECT_PATH: ${{ inputs.project-path }}
-        OUT_HTML: ${{ inputs.output }}
-        CI_FLAG: ${{ inputs.ci }}
+        COMMAND: ${{ inputs.command }}
+        OUT: ${{ inputs.output }}
+        FORMAT: ${{ inputs.format }}
+        POLICY: ${{ inputs.policy }}
         ALLOW: ${{ inputs.allow-hosts }}
         DENY: ${{ inputs.deny-hosts }}
-        SARIF_OUT: ${{ inputs.sarif-output }}
+        SARIF: ${{ inputs.sarif-output }}
+        PM: ${{ inputs.package-manager }}
         RUNNER_N: ${{ inputs.runner }}
+        DOCKER: ${{ inputs.docker }}
+        DOCKER_NET: ${{ inputs.docker-network }}
         DOCKER_IMG: ${{ inputs.docker-image }}
-        ACTION_PATH: ${{ github.action_path }}
+        IS_VERSION: ${{ inputs.installsentry-version }}
       run: |
         set -euo pipefail
-        CLI="${ACTION_PATH}/../../../dist/cli.js"
         P="$GITHUB_WORKSPACE/${PROJECT_PATH}"
-        O="${OUT_HTML}"
+        O="$OUT"
         if [[ "$O" != /* ]]; then O="$GITHUB_WORKSPACE/$O"; fi
-        args=(run "$P" -o "$O")
-        if [ "$CI_FLAG" = "true" ]; then args+=(--ci); fi
-        if [ -n "$ALLOW" ]; then args+=(--allow-hosts "$ALLOW"); fi
+        args=("$COMMAND" "$P" -o "$O" --policy "$POLICY" --format "$FORMAT")
+        if [ "$COMMAND" = "ci" ]; then args+=(--allow-hosts "$ALLOW"); fi
         if [ -n "$DENY" ]; then args+=(--deny-hosts "$DENY"); fi
-        if [ -n "$SARIF_OUT" ]; then args+=(--sarif "$GITHUB_WORKSPACE/$SARIF_OUT"); fi
-        args+=(--runner "$RUNNER_N")
-        if [ "$RUNNER_N" = "docker" ] && [ -n "$DOCKER_IMG" ]; then args+=(--docker-image "$DOCKER_IMG"); fi
-        node "$CLI" "${args[@]}"
+        if [ -n "$SARIF" ]; then args+=(--sarif "$GITHUB_WORKSPACE/$SARIF"); fi
+        if [ -n "$PM" ]; then args+=(--package-manager "$PM"); fi
+        if [ "$DOCKER" = "true" ]; then args+=(--docker); fi
+        if [ "$RUNNER_N" = "docker" ]; then args+=(--runner docker); fi
+        if [ -n "$DOCKER_IMG" ]; then args+=(--docker-image "$DOCKER_IMG"); fi
+        if [ "$DOCKER_NET" = "none" ]; then args+=(--docker-network none); fi
+        npx --yes "installsentry@${IS_VERSION}" "${args[@]}"
