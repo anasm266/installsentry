@@ -2,16 +2,40 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { parseJsonUtf8, stripBom } from './json-utf8.js';
+import type { CiPolicyMode } from './policy.js';
+import type { FailOnRule } from './policy.js';
+
+export type ReportFormat = 'html' | 'json' | 'both';
 
 export interface InstallsentryConfig {
-  /** Network policy; see README */
+  version?: number;
   ci?: {
+    policy?: CiPolicyMode;
     allowHosts?: string[];
     denyHosts?: string[];
+    failOn?: FailOnRule[];
+  };
+  runner?: {
+    mode?: 'host' | 'docker';
+    dockerImage?: string;
+    dockerNetwork?: 'default' | 'none';
+  };
+  report?: {
+    output?: string;
+    format?: ReportFormat;
+    sarif?: string;
+  };
+  baseline?: {
+    path?: string;
   };
 }
 
-const CONFIG_NAMES = ['.installsentry.yaml', '.installsentry.yml', 'installsentry.json', '.installsentry.json'] as const;
+const CONFIG_NAMES = [
+  '.installsentry.yaml',
+  '.installsentry.yml',
+  'installsentry.json',
+  '.installsentry.json',
+] as const;
 
 /**
  * Load optional project-level config. First matching filename wins.
@@ -35,4 +59,8 @@ export function splitHostList(s: string | undefined): string[] {
     .split(/[,;]\s*|\s+/)
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+export function defaultBaselinePath(config: InstallsentryConfig | null): string {
+  return config?.baseline?.path || '.installsentry/baseline.json';
 }
