@@ -2,18 +2,32 @@ import { spawn } from 'node:child_process';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prepareInstallWorkspace, buildInstallEnv, type SandboxResult, type SandboxOptions } from './sandbox.js';
-import { npmInstallArgs } from './npm-command.js';
+import { installArgs, installBinary } from './install-command.js';
 
 const DEFAULT_IMAGE = 'node:20-bookworm-slim';
 
-export type DockerRunOptions = SandboxOptions & { dockerImage?: string };
+export type DockerRunOptions = SandboxOptions & {
+  dockerImage?: string;
+  dockerNetwork?: 'default' | 'none';
+};
 
-/**
- * Run `npm install` inside a container with the project temp dir mounted at `/project`.
- * Requires Docker on `PATH`. Best supported on Linux CI; on Windows, Docker Desktop path sharing must allow the temp drive.
- */
+function dockerAvailable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const p = spawn('docker', ['version'], { stdio: 'ignore' });
+    p.on('error', () => resolve(false));
+    p.on('close', (code) => resolve(code === 0));
+  });
+}
+
 export async function runDockerInstall(options: DockerRunOptions): Promise<SandboxResult> {
-  const { tempDir, traceFile, shimPath } = prepareInstallWorkspace(options.projectPath);
+  if (!(await dockerAvailable())) {
+    throw new Error(
+      'Docker is not available on PATH. Install Docker Desktop (Windows/macOS) or docker.io (Linux), or use the default host runner.'
+    );
+  }
+
+  const pm = options.packageManager;
+  const { tempDir, traceFile, shimPath } = prepareInstallWorkspace(options.projectPath, pm);
   const env = buildInstallEnv({
     projectRoot: '/project',
     traceFile: '/project/trace.jsonl',
@@ -31,7 +45,8 @@ export async function runDockerInstall(options: DockerRunOptions): Promise<Sandb
   writeFileSync(envFile, lines.join('\n'), { encoding: 'utf-8' });
 
   const image = options.dockerImage || DEFAULT_IMAGE;
-  const npmCommand = options.npmCommand || 'install';
+  const installCommand = options.installCommand || 'install';
+  const binary = installBinary(pm);
   const args: string[] = [
     'run',
     '--rm',
@@ -41,10 +56,11 @@ export async function runDockerInstall(options: DockerRunOptions): Promise<Sandb
     `${tempDir}:/project`,
     '-w',
     '/project',
-    image,
-    'npm',
-    ...npmInstallArgs(npmCommand),
   ];
+  if (options.dockerNetwork === 'none') {
+    args.push('--network', 'none');
+  }
+  args.push(image, binary, ...installArgs(pm, installCommand));
 
   return new Promise((resolvePromise, reject) => {
     const p = spawn('docker', args, { stdio: 'pipe' });

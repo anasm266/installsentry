@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Lockfile, LockfilePackage, DependencyGraph, GraphNode, GraphEdge } from './types.js';
-import { getPackageNameFromPath } from './lockfile.js';
+import { getPackageNameFromPath } from './lockfile/npm.js';
 import { parseJsonUtf8 } from './json-utf8.js';
 
 const LIFECYCLE_SCRIPT_NAMES = new Set([
