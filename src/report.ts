@@ -26,8 +26,34 @@ export function generateReport(data: ReportData, outputPath: string) {
   writeFileSync(outputPath, html, 'utf-8');
 }
 
+function renderLifecyclePreviews(
+  previews: ReportData['lifecyclePreviews']
+): string {
+  if (!previews?.length) {
+    return '<p style="color:#8b949e;font-size:.85rem;">No lifecycle script previews.</p>';
+  }
+  return previews
+    .slice(0, 8)
+    .map(
+      (p) => `
+        <div class="alert" style="margin-bottom:.75rem;">
+          <div class="alert-title">${escapeHtml(p.name)}@${escapeHtml(p.version)}</div>
+          ${p.scripts
+            .map(
+              (s) => `
+            <div class="alert-meta" style="margin-top:.35rem;">
+              <strong>${escapeHtml(s.name)}</strong>: <code>${escapeHtml(s.command)}</code>
+              ${s.source ? `<pre style="font-size:.7rem;overflow:auto;max-height:120px;margin-top:.35rem;">${escapeHtml(s.source.slice(0, 800))}</pre>` : ''}
+            </div>`
+            )
+            .join('')}
+        </div>`
+    )
+    .join('');
+}
+
 function buildHtml(data: ReportData): string {
-  const { graph, analysis, targetPackage, targetVersion } = data;
+  const { graph, analysis, targetPackage, targetVersion, lifecyclePreviews } = data;
   const findings = buildFindings(analysis, graph);
   const findingCounts = countFindingsBySeverity(findings);
 
@@ -131,6 +157,10 @@ function buildHtml(data: ReportData): string {
       <div class="section">
         <h3>Findings</h3>
         ${renderFindings(findings)}
+      </div>
+      <div class="section">
+        <h3>Lifecycle scripts</h3>
+        ${renderLifecyclePreviews(lifecyclePreviews)}
       </div>
       <div class="section">
         <h3>Secret Canary Alerts</h3>
