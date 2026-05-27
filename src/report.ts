@@ -28,7 +28,7 @@ export function generateReport(data: ReportData, outputPath: string) {
 
 function buildHtml(data: ReportData): string {
   const { graph, analysis, targetPackage, targetVersion } = data;
-  const findings = buildFindings(analysis);
+  const findings = buildFindings(analysis, graph);
   const findingCounts = countFindingsBySeverity(findings);
 
   const baseNodes = Array.from(graph.nodes.values()).map((n) => ({

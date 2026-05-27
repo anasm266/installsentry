@@ -1,12 +1,29 @@
 import { displayPackageIdForReport } from './attribution.js';
-import type { AnalysisResult } from './types.js';
+import type { AnalysisResult, DependencyGraph } from './types.js';
+import {
+  parseAttributionFromDetails,
+  resolveAttributionConfidence,
+  type AttributionConfidence,
+} from './attribution-v2.js';
+import { buildEvasionHints } from './evasion.js';
 
 export type FindingSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
+export interface FindingAttribution {
+  cwdPackage: string;
+  npmPackageName?: string;
+  npmLifecycleEvent?: string;
+  confidence: AttributionConfidence;
+}
+
 export interface Finding {
+  id: string;
   severity: FindingSeverity;
   package: string;
+  title: string;
   detail: string;
+  evidence?: Record<string, unknown>;
+  attribution: FindingAttribution;
 }
 
 export const SEVERITY_ORDER: Record<FindingSeverity, number> = {
@@ -26,7 +43,20 @@ export function canaryLabel(canary: string): string {
   return 'fake secret canary';
 }
 
-export function buildFindings(analysis: AnalysisResult): Finding[] {
+function attributionForPackage(
+  packageId: string,
+  graph: DependencyGraph,
+  env?: ReturnType<typeof parseAttributionFromDetails>
+): FindingAttribution {
+  return {
+    cwdPackage: packageId,
+    npmPackageName: env?.npmPackageName,
+    npmLifecycleEvent: env?.npmLifecycleEvent,
+    confidence: resolveAttributionConfidence(packageId, env, graph),
+  };
+}
+
+export function buildFindings(analysis: AnalysisResult, graph: DependencyGraph): Finding[] {
   const findings: Finding[] = [];
 
   for (const hit of analysis.secretHits) {
@@ -42,24 +72,38 @@ export function buildFindings(analysis: AnalysisResult): Finding[] {
       detail += ` from ${hit.filePath}`;
     }
     findings.push({
+      id: isNetworkExfil ? 'secret-canary-network' : 'secret-canary-read',
       severity: isNetworkExfil ? 'CRITICAL' : 'HIGH',
       package: displayPackageIdForReport(hit.package),
+      title: isNetworkExfil ? 'Secret canary exfiltration' : 'Secret canary read',
       detail,
+      evidence: { canary: hit.canary, filePath: hit.filePath },
+      attribution: attributionForPackage(hit.package, graph),
     });
   }
 
   for (const request of analysis.networkRequests) {
     findings.push({
+      id: 'network-egress',
       severity: 'MEDIUM',
       package: displayPackageIdForReport(request.package),
+      title: 'Network egress during install',
       detail: `made ${request.method} request to ${request.host || request.url}`,
+      evidence: { url: request.url, host: request.host, method: request.method },
+      attribution: attributionForPackage(request.package, graph),
     });
   }
+
+  const evasion = buildEvasionHints(analysis.events).map((h) => ({
+    ...h,
+    package: displayPackageIdForReport(h.package),
+  }));
+  findings.push(...evasion);
 
   const seen = new Set<string>();
   return findings
     .filter((finding) => {
-      const key = `${finding.severity}\0${finding.package}\0${finding.detail}`;
+      const key = `${finding.id}\0${finding.severity}\0${finding.package}\0${finding.detail}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -67,10 +111,12 @@ export function buildFindings(analysis: AnalysisResult): Finding[] {
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
 
-export function countFindingsBySeverity(findings: Finding[]): Record<FindingSeverity, number> {
+export function countFindingsBySeverity(
+  findings: Finding[]
+): Record<FindingSeverity, number> {
   return findings.reduce<Record<FindingSeverity, number>>(
     (counts, finding) => {
-      counts[finding.severity] += 1;
+      if (finding.severity in counts) counts[finding.severity] += 1;
       return counts;
     },
     { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }

@@ -33,7 +33,16 @@ export interface DependencyGraph {
 }
 
 export interface TraceEvent {
-  type: 'fs.read' | 'fs.write' | 'http.request' | 'child_process.spawn' | 'lifecycle.start' | 'lifecycle.end';
+  type:
+    | 'fs.read'
+    | 'fs.write'
+    | 'http.request'
+    | 'child_process.spawn'
+    | 'lifecycle.start'
+    | 'lifecycle.end'
+    | 'dns.lookup'
+    | 'net.connect'
+    | 'tls.connect';
   /** Lockfile path id (e.g. node_modules/pkg), `install-root` (npm at project root), or `unknown` */
   package?: string;
   script?: string; // which lifecycle script
@@ -87,4 +96,5 @@ export interface ReportData {
   analysis: AnalysisResult;
   targetPackage: string;
   targetVersion: string;
+  lifecyclePreviews?: import('./lifecycle-preview.js').LifecycleScriptPreview[];
 }
