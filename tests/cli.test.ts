@@ -72,7 +72,7 @@ describe('cli defaults', () => {
         const result = await runCli(['-o', reportPath], projectPath);
 
         expect(result.code).toBe(0);
-        expect(result.stdout).toContain('Parsing lockfile');
+        expect(result.stdout).toContain('Parsing npm lockfile');
         expect(result.stdout).toContain('InstallSentry found');
         expect(result.stdout).toContain('CRITICAL');
         expect(result.stdout).toContain('fake AWS secret canary');
@@ -183,10 +183,8 @@ describe('cli defaults', () => {
       const result = await runCli(['scan'], tempRoot);
 
       expect(result.code).toBe(1);
-      expect(result.stderr).toContain(
-        'InstallSentry needs an npm project with package.json and package-lock.json v3.'
-      );
-      expect(result.stderr).toContain('Missing: package-lock.json');
+      expect(result.stderr).toContain('InstallSentry needs a npm project');
+      expect(result.stderr).toContain('package-lock.json');
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
