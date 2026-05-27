@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { npmInstallArgs, type NpmCommand } from './npm-command.js';
+import type { PackageManagerKind } from './package-manager.js';
+import { installArgs, installBinary } from './install-command.js';
+import type { InstallCommand } from './install-command.js';
 
 export interface SandboxResult {
   tempDir: string;
@@ -15,9 +17,10 @@ export interface SandboxResult {
 
 export interface SandboxOptions {
   projectPath: string;
+  packageManager: PackageManagerKind;
   packageName?: string;
   scriptName?: string;
-  npmCommand?: NpmCommand;
+  installCommand?: InstallCommand;
 }
 
 const SECRET_CANARIES: Record<string, string> = {
@@ -36,15 +39,35 @@ export interface PreparedInstallWorkspace {
   shimPath: string;
 }
 
+function copyIfExists(src: string, dest: string): void {
+  if (existsSync(src)) cpSync(src, dest);
+}
+
 /**
- * Copy lockfile, package.json, local packages, and shim into a temp directory.
+ * Copy project manifests, lockfiles, workspaces, and shim into a temp directory.
  */
-export function prepareInstallWorkspace(projectPath: string): PreparedInstallWorkspace {
+export function prepareInstallWorkspace(
+  projectPath: string,
+  packageManager: PackageManagerKind
+): PreparedInstallWorkspace {
   const tempDir = mkdtempSync(join(tmpdir(), 'installsentry-'));
   const traceFile = join(tempDir, 'trace.jsonl');
 
   cpSync(resolve(projectPath, 'package.json'), join(tempDir, 'package.json'));
-  cpSync(resolve(projectPath, 'package-lock.json'), join(tempDir, 'package-lock.json'));
+
+  switch (packageManager) {
+    case 'pnpm':
+      copyIfExists(resolve(projectPath, 'pnpm-lock.yaml'), join(tempDir, 'pnpm-lock.yaml'));
+      copyIfExists(resolve(projectPath, 'pnpm-workspace.yaml'), join(tempDir, 'pnpm-workspace.yaml'));
+      break;
+    case 'yarn':
+      copyIfExists(resolve(projectPath, 'yarn.lock'), join(tempDir, 'yarn.lock'));
+      copyIfExists(resolve(projectPath, '.yarnrc.yml'), join(tempDir, '.yarnrc.yml'));
+      break;
+    default:
+      cpSync(resolve(projectPath, 'package-lock.json'), join(tempDir, 'package-lock.json'));
+  }
+
   const packagesDir = resolve(projectPath, 'packages');
   if (existsSync(packagesDir)) {
     cpSync(packagesDir, join(tempDir, 'packages'), { recursive: true });
@@ -54,30 +77,27 @@ export function prepareInstallWorkspace(projectPath: string): PreparedInstallWor
   const shimSrc = join(distDir, 'shim.cjs');
   const canarySrc = join(distDir, 'canary-substrings.json');
   const shimPath = join(tempDir, 'installsentry-shim.cjs');
-  const canaryDest = join(tempDir, 'canary-substrings.json');
   cpSync(shimSrc, shimPath);
-  cpSync(canarySrc, canaryDest);
+  cpSync(canarySrc, join(tempDir, 'canary-substrings.json'));
 
   return { tempDir, traceFile, shimPath };
 }
 
-export function buildInstallEnv(
-  p: {
-    projectRoot: string;
-    traceFile: string;
-    shimPath: string;
-    packageName: string;
-    scriptName: string;
-    /** Merge with `process.env` (host). Docker uses `false` and a minimal set. */
-    includeProcessEnv: boolean;
-  }
-): Record<string, string> {
+export function buildInstallEnv(p: {
+  projectRoot: string;
+  traceFile: string;
+  shimPath: string;
+  packageName: string;
+  scriptName: string;
+  includeProcessEnv: boolean;
+}): Record<string, string> {
   const base: Record<string, string> = {
     ...SECRET_CANARIES,
     INSTALLSENTRY_TRACE_FILE: p.traceFile,
     INSTALLSENTRY_PACKAGE_NAME: p.packageName,
     INSTALLSENTRY_PROJECT_ROOT: p.projectRoot,
     INSTALLSENTRY_SCRIPT_NAME: p.scriptName,
+    INSTALLSENTRY_SHIM_PATH: p.shimPath,
     NODE_OPTIONS: `--require ${p.shimPath}`,
   };
 
@@ -104,17 +124,21 @@ export function buildInstallEnv(
   return env;
 }
 
-function waitForNpm(
+function waitForInstall(
   tempDir: string,
   env: Record<string, string>,
   traceFile: string,
-  npmCommand: NpmCommand
+  packageManager: PackageManagerKind,
+  installCommand: InstallCommand
 ): Promise<SandboxResult> {
+  const binary = installBinary(packageManager);
+  const args = installArgs(packageManager, installCommand);
+
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn('npm', npmInstallArgs(npmCommand), {
+    const proc = spawn(binary, args, {
       cwd: tempDir,
       env,
-      shell: true,
+      shell: packageManager === 'npm',
     });
     let stdout = '';
     let stderr = '';
@@ -139,28 +163,26 @@ function waitForNpm(
   });
 }
 
-/**
- * Default host runner: temp dir + `npm install` on the current machine.
- */
 export async function runSandboxedInstall(options: SandboxOptions): Promise<SandboxResult> {
-  const { tempDir, traceFile, shimPath } = prepareInstallWorkspace(options.projectPath);
-  const npmCommand = options.npmCommand || 'install';
+  const pm = options.packageManager;
+  const { tempDir, traceFile, shimPath } = prepareInstallWorkspace(options.projectPath, pm);
+  const installCommand = options.installCommand || 'install';
   const env = buildInstallEnv({
     projectRoot: tempDir,
     traceFile,
     shimPath,
     packageName: options.packageName || 'root',
-    scriptName: options.scriptName || 'install',
+    scriptName: options.scriptName || installCommand,
     includeProcessEnv: true,
   });
-  return waitForNpm(tempDir, env, traceFile, npmCommand);
+  return waitForInstall(tempDir, env, traceFile, pm, installCommand);
 }
 
 export function cleanupSandbox(tempDir: string) {
   try {
     rmSync(tempDir, { recursive: true, force: true });
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
