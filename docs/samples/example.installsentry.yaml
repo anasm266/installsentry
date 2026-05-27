@@ -1,7 +1,24 @@
-# Copy to the root of a project you analyze, as `.installsentry.yaml` (or merge keys into .installsentry.json).
-# Optional: `ci.allowHosts` enables allowlist mode for `installsentry run --ci` and SARIF.
+version: 1
+
 ci:
+  policy: balanced
   allowHosts:
     - registry.npmjs.org
-  # denyHosts:
-  #   - example.com
+  denyHosts:
+    - example.com
+  failOn:
+    - secret-canary
+    - denied-network
+
+runner:
+  mode: host
+  dockerImage: node:20-bookworm-slim
+  dockerNetwork: default
+
+report:
+  output: installsentry-report.html
+  format: both
+  sarif: installsentry.sarif
+
+baseline:
+  path: .installsentry/baseline.json
